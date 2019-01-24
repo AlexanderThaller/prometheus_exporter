@@ -1,5 +1,8 @@
 # prometheus_exporter
 
+[![crates.io](https://img.shields.io/crates/v/prometheus_exporter.svg)](https://crates.io/crates/prometheus_exporter)
+[![docs.rs](https://docs.rs/prometheus_exporter/badge.svg)](https://docs.rs/prometheus_exporter)
+
 Helper libary to export prometheus metrics using hyper.
 
 It uses [rust-prometheus](https://github.com/pingcap/rust-prometheus) for
