@@ -10,6 +10,13 @@ collecting and rendering the prometheus metrics and
 [hyper](https://github.com/hyperium/hyper) for exposing the metrics through
 http.
 
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+prometheus_exporter = "0.1"
+```
+
 The usage is pretty simple. First you register all your metrics with the
 provided macros:
 
