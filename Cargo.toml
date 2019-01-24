@@ -1,0 +1,14 @@
+[package]
+name = "prometheus_exporter"
+version = "0.1.0"
+authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
+edition = "2018"
+description = "Helper libary to export prometheus metrics using hyper."
+
+[dependencies]
+hyper = "0.12"
+log = "0.4"
+
+[dependencies.prometheus]
+version = "0.5"
+default-features = false
