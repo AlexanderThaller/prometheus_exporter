@@ -14,7 +14,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-prometheus_exporter = "0.1"
+prometheus_exporter = "0.2"
 ```
 
 The usage is pretty simple. First you register all your metrics with the
@@ -48,5 +48,26 @@ PrometheusExporter::run(&addr);
 
 This will block the thread it is executed in.
 
-In the future the exporter will also provide a way to update the metrics when a
-new request comes in but that still needs to be implemented.
+Alternatively you can use `run_and_notify` which will send a message over a
+channel when a new request is received giving the possibility to update metrics
+before they are sent out to a requester:
+
+```rust
+use prometheus_exporter::{
+    FinishedUpdate,
+    PrometheusExporter,
+};
+
+let addr: SocketAddr = "0.0.0.0:19899".parse().expect("can not parse listen addr");
+let (request_receiver, finished_sender) = PrometheusExporter::run_and_notify(addr);
+
+let metrics = Metrics::new("netstat_exporter");
+
+loop {
+    request_receiver.recv().unwrap();
+
+    metrics.update();
+
+    finished_sender.send(FinishedUpdate).unwrap();
+}
+```
