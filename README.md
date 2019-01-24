@@ -30,8 +30,10 @@ connection_state
 After all the metrics are registerd and the updating is setup the exporter can
 be started:
 ```rust
-let addr = "0.0.0.0:19899".parse().expect("can not parse listen addr");
-PrometheusExporter::run(addr);
+use std::net::SocketAddr;
+
+let addr: SocketAddr = "0.0.0.0:19899".parse().expect("can not parse listen addr");
+PrometheusExporter::run(&addr);
 ```
 
 This will block the thread it is executed in.
