@@ -2,9 +2,10 @@
 
 Helper libary to export prometheus metrics using hyper.
 
-It uses https://github.com/pingcap/rust-prometheus[rust-prometheus] for
+It uses [rust-prometheus](https://github.com/pingcap/rust-prometheus) for
 collecting and rendering the prometheus metrics and
-https://github.com/hyperium/hyper[hyper] for exposing the metrics through http.
+[hyper](https://github.com/hyperium/hyper) for exposing the metrics through
+http.
 
 The usage is pretty simple. First you register all your metrics with the
 provided macros:
