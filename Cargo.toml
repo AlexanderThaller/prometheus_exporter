@@ -2,8 +2,15 @@
 name = "prometheus_exporter"
 version = "0.1.0"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
-edition = "2018"
+
 description = "Helper libary to export prometheus metrics using hyper."
+documentation = "https://github.com/AlexanderThaller/prometheus_exporter"
+homepage = "https://github.com/AlexanderThaller/prometheus_exporter"
+readme = "README.md"
+repository = "https://github.com/AlexanderThaller/prometheus_exporter"
+license = "MIT"
+
+edition = "2018"
 
 [dependencies]
 hyper = "0.12"
