@@ -59,3 +59,10 @@ impl PrometheusExporter {
         rt::run(server);
     }
 }
+
+/// Trait to pass an updater to PrometheusExporte that will be used to update
+/// the metrics for each requst.
+pub trait MetricUpdater {
+    /// Runs the update on the metrics.
+    fn update(&self);
+}
