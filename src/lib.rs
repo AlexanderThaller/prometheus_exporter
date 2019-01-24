@@ -1,3 +1,7 @@
+//! "Helper to export prometheus metrics using hyper."
+
+#![deny(missing_docs)]
+
 use std::net::SocketAddr;
 
 use log::info;
@@ -18,9 +22,12 @@ use prometheus::{
     TextEncoder,
 };
 
+/// Struct that holds everything together.
 pub struct PrometheusExporter {}
 
 impl PrometheusExporter {
+    /// Start the prometheus exporter and bind the hyper http server to the
+    /// given socket.
     pub fn run(addr: &SocketAddr) {
         let service = move || {
             let encoder = TextEncoder::new();
