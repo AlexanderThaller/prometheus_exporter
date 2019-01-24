@@ -21,7 +21,7 @@ use prometheus::{
 pub struct PrometheusExporter {}
 
 impl PrometheusExporter {
-    pub fn run(self, addr: &SocketAddr) {
+    pub fn run(addr: &SocketAddr) {
         let service = move || {
             let encoder = TextEncoder::new();
 
