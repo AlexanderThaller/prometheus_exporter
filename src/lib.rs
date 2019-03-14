@@ -118,6 +118,47 @@ impl PrometheusExporter {
         (request_receiver, finished_sender)
     }
 
+    /// Starts the prometheus exporter with http and will continiously send a
+    /// message to update the metrics and wait inbetween for the given
+    /// duration.
+    pub fn run_and_repeat(
+        addr: SocketAddr,
+        duration: std::time::Duration,
+    ) -> (Receiver<NewRequest>, Sender<FinishedUpdate>) {
+        let (request_sender, request_receiver) = bounded(0);
+        let (finished_sender, finished_receiver) = bounded(0);
+
+        thread::spawn(move || {
+            let service = move || {
+                let encoder = TextEncoder::new();
+
+                service_fn_ok(move |req| match (req.method(), req.uri().path()) {
+                    (&Method::GET, "/metrics") => PrometheusExporter::send_metrics(&encoder),
+                    _ => PrometheusExporter::send_redirect(),
+                })
+            };
+
+            let server = Server::bind(&addr)
+                .serve(service)
+                .map_err(|e| error!("problem while serving metrics: {}", e));
+
+            info!("Listening on http://{}", addr);
+
+            rt::run(server);
+        });
+
+        {
+            thread::spawn(move || loop {
+                thread::sleep(duration);
+
+                request_sender.send(NewRequest {}).unwrap();
+                finished_receiver.recv().unwrap();
+            });
+        }
+
+        (request_receiver, finished_sender)
+    }
+
     fn send_metrics(encoder: &TextEncoder) -> Response<Body> {
         let metric_families = prometheus::gather();
         let mut buffer = vec![];
