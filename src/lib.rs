@@ -2,8 +2,10 @@
 
 #![deny(missing_docs)]
 
-use std::net::SocketAddr;
-use std::thread;
+use std::{
+    net::SocketAddr,
+    thread,
+};
 
 use log::{
     error,

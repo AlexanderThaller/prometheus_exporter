@@ -1,0 +1,11 @@
+[package]
+name = "update_and_notify"
+version = "0.1.0"
+authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
+edition = "2018"
+
+[dependencies]
+env_logger = "0.6"
+prometheus = "0.5"
+prometheus_exporter = "0.2"
+rand = "0.6"

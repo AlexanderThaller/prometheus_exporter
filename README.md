@@ -10,6 +10,8 @@ collecting and rendering the prometheus metrics and
 [hyper](https://github.com/hyperium/hyper) for exposing the metrics through
 http.
 
+## Usage
+
 Add this to your `Cargo.toml`:
 
 ```toml
@@ -18,7 +20,7 @@ prometheus_exporter = "0.2"
 ```
 
 The usage is pretty simple. First you register all your metrics with the
-provided macros:
+prometheus macros that will add the metric to the global register:
 
 ```rust
 let connection_state = register_int_gauge_vec!(
@@ -29,7 +31,7 @@ let connection_state = register_int_gauge_vec!(
 .expect("can not create tcp_connection_state_closed metric");
 ```
 
-That is also where the metric values get updated:
+And update the metric value in the same context:
 
 ```rust
 connection_state
@@ -71,3 +73,5 @@ loop {
     finished_sender.send(FinishedUpdate).unwrap();
 }
 ```
+
+More examples can be found in the `examples` folder.
