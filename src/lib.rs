@@ -49,12 +49,10 @@ impl From<HyperError> for StartError {
 /// Struct that holds everything together.
 pub struct PrometheusExporter;
 
-/// Struct that will be sent when there is a new request in the run_and_nofity
-/// function.
-pub struct NewRequest;
+/// Struct that will be sent when metrics should be updated.
+pub struct Update;
 
-/// Struct that has to be sent when the update was finished and the request
-/// should send the metrics to the requester.
+/// Struct that has to be sent when the update of the metrics was finished.
 pub struct FinishedUpdate;
 
 impl PrometheusExporter {
@@ -85,19 +83,19 @@ impl PrometheusExporter {
     /// socket and send messages when there are new requests for metrics.
     /// This is usefull if metrics should be updated everytime there is a
     /// requests.
-    pub fn run_and_notify(addr: SocketAddr) -> (Receiver<NewRequest>, Sender<FinishedUpdate>) {
-        let (request_sender, request_receiver) = bounded(0);
+    pub fn run_and_notify(addr: SocketAddr) -> (Receiver<Update>, Sender<FinishedUpdate>) {
+        let (update_sender, update_receiver) = bounded(0);
         let (finished_sender, finished_receiver) = bounded(0);
 
         thread::spawn(move || {
             let service = move || {
                 let encoder = TextEncoder::new();
-                let request_sender = request_sender.clone();
+                let update_sender = update_sender.clone();
                 let finished_receiver = finished_receiver.clone();
 
                 service_fn_ok(move |req| match (req.method(), req.uri().path()) {
                     (&Method::GET, "/metrics") => {
-                        request_sender.send(NewRequest {}).unwrap();
+                        update_sender.send(Update {}).unwrap();
                         finished_receiver.recv().unwrap();
 
                         PrometheusExporter::send_metrics(&encoder)
@@ -115,7 +113,7 @@ impl PrometheusExporter {
             rt::run(server);
         });
 
-        (request_receiver, finished_sender)
+        (update_receiver, finished_sender)
     }
 
     /// Starts the prometheus exporter with http and will continiously send a
@@ -124,8 +122,8 @@ impl PrometheusExporter {
     pub fn run_and_repeat(
         addr: SocketAddr,
         duration: std::time::Duration,
-    ) -> (Receiver<NewRequest>, Sender<FinishedUpdate>) {
-        let (request_sender, request_receiver) = bounded(0);
+    ) -> (Receiver<Update>, Sender<FinishedUpdate>) {
+        let (update_sender, update_receiver) = bounded(0);
         let (finished_sender, finished_receiver) = bounded(0);
 
         thread::spawn(move || {
@@ -151,12 +149,12 @@ impl PrometheusExporter {
             thread::spawn(move || loop {
                 thread::sleep(duration);
 
-                request_sender.send(NewRequest {}).unwrap();
+                update_sender.send(Update {}).unwrap();
                 finished_receiver.recv().unwrap();
             });
         }
 
-        (request_receiver, finished_sender)
+        (update_receiver, finished_sender)
     }
 
     fn send_metrics(encoder: &TextEncoder) -> Response<Body> {
