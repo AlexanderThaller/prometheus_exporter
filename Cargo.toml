@@ -1,10 +1,10 @@
 [package]
 name = "prometheus_exporter"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using hyper."
-documentation = "https://github.com/AlexanderThaller/prometheus_exporter"
+documentation = "https://docs.rs/prometheus_exporter/"
 homepage = "https://github.com/AlexanderThaller/prometheus_exporter"
 readme = "README.md"
 repository = "https://github.com/AlexanderThaller/prometheus_exporter"
