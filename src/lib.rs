@@ -2,16 +2,6 @@
 
 #![deny(missing_docs)]
 
-use std::{
-    net::SocketAddr,
-    thread,
-};
-
-use log::{
-    error,
-    info,
-};
-
 use crossbeam_channel::{
     bounded,
     Receiver,
@@ -29,12 +19,23 @@ use hyper::{
     Response,
     Server,
 };
+use log::{
+    error,
+    info,
+};
 use prometheus::{
     Encoder,
     TextEncoder,
 };
+use std::{
+    error::Error,
+    fmt,
+    net::SocketAddr,
+    thread,
+};
 
 /// Errors that can happen when the prometheus exporter gets started.
+#[derive(Debug)]
 pub enum StartError {
     /// Hyper related errors.
     HyperError(HyperError),
@@ -43,6 +44,26 @@ pub enum StartError {
 impl From<HyperError> for StartError {
     fn from(err: HyperError) -> Self {
         StartError::HyperError(err)
+    }
+}
+
+impl fmt::Display for StartError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.description())
+    }
+}
+
+impl Error for StartError {
+    fn description(&self) -> &str {
+        match self {
+            StartError::HyperError(err) => err.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match self {
+            StartError::HyperError(err) => Some(err),
+        }
     }
 }
 
