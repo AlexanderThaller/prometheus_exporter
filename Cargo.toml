@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.3.2"
+version = "0.4.0"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using hyper."
@@ -18,5 +18,5 @@ hyper = "0.12"
 log = "0.4"
 
 [dependencies.prometheus]
-version = "0.5"
+version = "0.7"
 default-features = false
