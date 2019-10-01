@@ -19,6 +19,7 @@ use hyper::{
     Response,
     Server,
 };
+#[cfg(feature = "log")]
 use log::{
     error,
     info,
@@ -91,9 +92,9 @@ impl PrometheusExporter {
 
         let server = Server::try_bind(&addr)?
             .serve(service)
-            .map_err(|e| error!("problem while serving metrics: {}", e));
+            .map_err(log_serving_error);
 
-        info!("Listening on http://{}", addr);
+        log_startup(&addr);
 
         rt::run(server);
 
@@ -127,9 +128,9 @@ impl PrometheusExporter {
 
             let server = Server::bind(&addr)
                 .serve(service)
-                .map_err(|e| error!("problem while serving metrics: {}", e));
+                .map_err(log_serving_error);
 
-            info!("Listening on http://{}", addr);
+            log_startup(&addr);
 
             rt::run(server);
         });
@@ -159,9 +160,9 @@ impl PrometheusExporter {
 
             let server = Server::bind(&addr)
                 .serve(service)
-                .map_err(|e| error!("problem while serving metrics: {}", e));
+                .map_err(log_serving_error);
 
-            info!("Listening on http://{}", addr);
+            log_startup(&addr);
 
             rt::run(server);
         });
@@ -193,4 +194,16 @@ impl PrometheusExporter {
             .body(Body::from(message))
             .unwrap()
     }
+}
+
+#[allow(unused)]
+fn log_startup(addr: &SocketAddr) {
+    #[cfg(feature = "log")]
+    info!("Listening on http://{}", addr);
+}
+
+#[allow(unused)]
+fn log_serving_error(error: HyperError) {
+    #[cfg(feature = "log")]
+    error!("problem while serving metrics: {}", error)
 }
