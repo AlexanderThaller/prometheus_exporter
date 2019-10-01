@@ -15,6 +15,10 @@ collecting and rendering the prometheus metrics and
 [hyper](https://github.com/hyperium/hyper) for exposing the metrics through
 http.
 
+**NOTICE:** You have to use the same prometheus crate version that is used by
+this crate to make sure that the global registrar use by the prometheus macros
+works as expected. Currently this crate uses prometheus version `0.7`.
+
 ## Usage
 
 Add this to your `Cargo.toml`:
