@@ -60,7 +60,7 @@ impl Error for StartError {
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match self {
             StartError::HyperError(err) => Some(err),
         }
