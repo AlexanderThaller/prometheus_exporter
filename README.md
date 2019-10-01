@@ -1,5 +1,6 @@
 # prometheus_exporter
 
+[![Build Status](https://travis-ci.org/AlexanderThaller/prometheus_exporter.svg?branch=master)](https://travis-ci.org/AlexanderThaller/prometheus_exporter)
 [![crates.io](https://img.shields.io/crates/v/prometheus_exporter.svg)](https://crates.io/crates/prometheus_exporter)
 [![docs.rs](https://docs.rs/prometheus_exporter/badge.svg)](https://docs.rs/prometheus_exporter)
 
