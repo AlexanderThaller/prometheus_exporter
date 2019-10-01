@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using hyper."
@@ -12,11 +12,18 @@ license = "MIT"
 
 edition = "2018"
 
+[badges]
+travis-ci = { repository = "AlexanderThaller/prometheus_exporter" }
+
+[package.metadata.docs.rs]
+features = ["log"]
+
+[features]
+# disable logging by disabling log feature
+default = ["log"]
+
 [dependencies]
 crossbeam-channel = "0.3"
 hyper = "0.12"
-log = "0.4"
-
-[dependencies.prometheus]
-version = "0.7"
-default-features = false
+log = { version = "0.4", optional = true }
+prometheus = { version = "0.7", default-features = false }
