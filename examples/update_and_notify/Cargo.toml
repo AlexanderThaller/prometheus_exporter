@@ -5,7 +5,7 @@ authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 edition = "2018"
 
 [dependencies]
-env_logger = "0.6"
-prometheus = "0.5"
+env_logger = "0.7"
+prometheus = "0.7"
 prometheus_exporter = { path = "../.." }
-rand = "0.6"
+rand = "0.7"
