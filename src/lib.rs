@@ -50,17 +50,11 @@ impl From<HyperError> for StartError {
 
 impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description())
+        write!(f, "{}", self)
     }
 }
 
 impl Error for StartError {
-    fn description(&self) -> &str {
-        match self {
-            StartError::HyperError(err) => err.description(),
-        }
-    }
-
     fn cause(&self) -> Option<&dyn Error> {
         match self {
             StartError::HyperError(err) => Some(err),
