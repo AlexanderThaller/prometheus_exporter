@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using hyper."
@@ -26,4 +26,4 @@ default = ["log"]
 crossbeam-channel = "0.3"
 hyper = "0.12"
 log = { version = "0.4", optional = true }
-prometheus = { version = "0.7", default-features = false }
+prometheus = { version = "0.8", default-features = false }
