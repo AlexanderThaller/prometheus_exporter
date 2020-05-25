@@ -18,7 +18,7 @@ http.
 
 **NOTICE:** You have to use the same prometheus crate version that is used by
 this crate to make sure that the global registrar use by the prometheus macros
-works as expected. Currently this crate uses prometheus version `0.7`.
+works as expected. Currently this crate uses prometheus version `0.8`.
 
 ## Usage
 
@@ -26,7 +26,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-prometheus_exporter = "0.4"
+prometheus_exporter = "0.5"
 ```
 
 There are three ways on how to use the exporter:
