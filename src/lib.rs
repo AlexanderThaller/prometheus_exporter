@@ -24,6 +24,7 @@ use log::{
     error,
     info,
 };
+pub use prometheus;
 use prometheus::{
     Encoder,
     TextEncoder,

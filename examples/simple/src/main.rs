@@ -4,12 +4,10 @@ use env_logger::{
     Builder,
     Env,
 };
-use prometheus::{
-    __register_gauge,
-    opts,
-    register_gauge,
+use prometheus_exporter::{
+    PrometheusExporter,
+    prometheus::register_gauge,
 };
-use prometheus_exporter::PrometheusExporter;
 use std::net::SocketAddr;
 
 fn main() {
