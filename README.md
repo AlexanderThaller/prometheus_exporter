@@ -18,7 +18,9 @@ http.
 
 **NOTICE:** You have to use the same prometheus crate version that is used by
 this crate to make sure that the global registrar use by the prometheus macros
-works as expected. Currently this crate uses prometheus version `0.8`.
+works as expected. This crate re-exports the prometheuse crate to make it easier
+to keep versions in sync (see examples). Currently this crate uses prometheus
+version `0.8`.
 
 ## Usage
 
@@ -58,12 +60,10 @@ use env_logger::{
     Builder,
     Env,
 };
-use prometheus::{
-    __register_gauge,
-    opts,
-    register_gauge,
+use prometheus_exporter::{
+    PrometheusExporter,
+    prometheus::register_gauge,
 };
-use prometheus_exporter::PrometheusExporter;
 use std::net::SocketAddr;
 
 fn main() {

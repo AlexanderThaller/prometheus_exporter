@@ -7,6 +7,5 @@ edition = "2018"
 [dependencies]
 env_logger = "0.7"
 log = "0.4"
-prometheus = "0.7"
 prometheus_exporter = { path = "../.." }
 rand = "0.7"
