@@ -5,14 +5,10 @@ use env_logger::{
     Builder,
     Env,
 };
-use prometheus::{
-    __register_gauge,
-    opts,
-    register_gauge,
-};
 use prometheus_exporter::{
     FinishedUpdate,
     PrometheusExporter,
+    prometheus::register_gauge,
 };
 use rand::Rng;
 use std::net::SocketAddr;

@@ -24,6 +24,7 @@ use log::{
     error,
     info,
 };
+pub use prometheus;
 use prometheus::{
     Encoder,
     TextEncoder,
@@ -50,7 +51,7 @@ impl From<HyperError> for StartError {
 
 impl fmt::Display for StartError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{:?}", self)
     }
 }
 
