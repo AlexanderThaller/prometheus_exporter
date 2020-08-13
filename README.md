@@ -20,7 +20,7 @@ http.
 this crate to make sure that the global registrar use by the prometheus macros
 works as expected. This crate re-exports the prometheuse crate to make it easier
 to keep versions in sync (see examples). Currently this crate uses prometheus
-version `0.8`.
+version `0.9`.
 
 ## Usage
 
