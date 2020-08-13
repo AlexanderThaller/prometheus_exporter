@@ -28,7 +28,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-prometheus_exporter = "0.5"
+prometheus_exporter = "0.6"
 ```
 
 There are three ways on how to use the exporter:
