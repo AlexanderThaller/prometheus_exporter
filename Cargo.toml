@@ -27,7 +27,9 @@ internal_metrics = ["lazy_static"]
 
 [dependencies]
 ascii = "1"
+crossbeam-channel = "0.4"
 crossbeam-utils = "0.8"
+hyper = "0.12"
 lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.10", default-features = false }
