@@ -22,6 +22,9 @@ works as expected. This crate re-exports the prometheuse crate to make it easier
 to keep versions in sync (see examples). Currently this crate uses prometheus
 version `0.10`.
 
+For information on how to migrate from an older crate version follow
+[MIGRATION](/MIGRATION.md).
+
 ## Usage
 
 Add this to your `Cargo.toml`:
