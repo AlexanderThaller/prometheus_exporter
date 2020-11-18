@@ -40,6 +40,7 @@ use std::{
 };
 use thiserror::Error;
 use tiny_http::{
+    Header,
     Request,
     Response,
     Server as HTTPServer,
@@ -175,30 +176,47 @@ impl Server {
             let encoder = TextEncoder::new();
 
             for request in server.incoming_requests() {
-                #[cfg(feature = "internal_metrics")]
-                HTTP_COUNTER.inc();
+                if let Err(err) = match request.url() {
+                    "/metrics" => {
+                        Self::handler_metrics(request, &encoder, &request_sender, &notify_receiver)
+                    }
 
-                #[cfg(feature = "internal_metrics")]
-                let _timer = HTTP_REQ_HISTOGRAM.start_timer();
-
-                request_sender
-                    .send(())
-                    .expect("can not send to request_sender. this should never happen");
-
-                notify_receiver
-                    .recv()
-                    .expect("can not receive from notify_receiver. this should never happen");
-
-                if let Err(err) = Self::process_request(request, &encoder) {
+                    _ => Self::handler_redirect(request),
+                } {
                     #[cfg(feature = "logging")]
                     error!("{}", err);
 
+                    // Just so there are no complains about unused err variable when logging
+                    // feature is disabled
                     drop(err)
                 }
             }
         });
 
         Ok(())
+    }
+
+    fn handler_metrics(
+        request: Request,
+        encoder: &TextEncoder,
+        request_sender: &SyncSender<()>,
+        notify_receiver: &Receiver<()>,
+    ) -> Result<(), Error> {
+        #[cfg(feature = "internal_metrics")]
+        HTTP_COUNTER.inc();
+
+        #[cfg(feature = "internal_metrics")]
+        let _timer = HTTP_REQ_HISTOGRAM.start_timer();
+
+        request_sender
+            .send(())
+            .expect("can not send to request_sender. this should never happen");
+
+        notify_receiver
+            .recv()
+            .expect("can not receive from notify_receiver. this should never happen");
+
+        Self::process_request(request, encoder)
     }
 
     fn process_request(request: Request, encoder: &TextEncoder) -> Result<(), Error> {
@@ -213,6 +231,22 @@ impl Server {
         HTTP_BODY_GAUGE.set(buffer.len() as f64);
 
         let response = Response::from_data(buffer);
+        request.respond(response).map_err(Error::Response)?;
+
+        Ok(())
+    }
+
+    fn handler_redirect(request: Request) -> Result<(), Error> {
+        let response = Response::from_string("try /metrics for metrics\n".to_string())
+            .with_status_code(301)
+            .with_header(Header {
+                field: "Location"
+                    .parse()
+                    .expect("can not parse location header field. this should never fail"),
+                value: ascii::AsciiString::from_ascii("/metrics")
+                    .expect("can not parse header value. this should never fail"),
+            });
+
         request.respond(response).map_err(Error::Response)?;
 
         Ok(())

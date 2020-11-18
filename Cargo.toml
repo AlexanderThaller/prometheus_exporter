@@ -16,10 +16,10 @@ edition = "2018"
 travis-ci = { repository = "AlexanderThaller/prometheus_exporter" }
 
 [package.metadata.docs.rs]
-features = ["log", "internal_metrics"]
+features = ["logging", "internal_metrics"]
 
 [features]
-# disable logging by disabling log feature
+# feature logging enables 
 # disable `prometheus_exporter` metrics by disabling internal_metrics feature
 default = ["logging", "internal_metrics"]
 logging = ["log"]
@@ -31,3 +31,4 @@ log = { version = "0.4", optional = true }
 prometheus = { version = "0.10", default-features = false }
 thiserror = "1"
 tiny_http = { version = "0.7", default-features = false }
+ascii = "1"
