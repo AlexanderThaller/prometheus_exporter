@@ -424,6 +424,8 @@ impl Server {
     }
 }
 
+// Everything below this line will be removed in the next major release.
+
 use crossbeam_channel::{
     bounded,
     Receiver as OldReceiver,
@@ -475,21 +477,35 @@ impl OldError for StartError {
 
 /// Struct that holds everything together.
 #[derive(Debug)]
+#[deprecated(since = "0.6.2", note = "Use `prometheus_exporter::Exporter` instead")]
 pub struct PrometheusExporter;
 
 /// Struct that will be sent when metrics should be updated.
 #[derive(Debug)]
+#[deprecated(
+    since = "0.6.2",
+    note = "Not needed anymore when using prometheus_exporter::Exporter"
+)]
 pub struct Update;
 
 /// Struct that has to be sent when the update of the metrics was finished.
 #[derive(Debug)]
+#[deprecated(
+    since = "0.6.2",
+    note = "Not needed anymore when using prometheus_exporter::Exporter"
+)]
 pub struct FinishedUpdate;
 
+#[allow(deprecated)]
 impl PrometheusExporter {
     /// Start the prometheus exporter and bind the hyper http server to the
     /// given socket.
     /// # Errors
     /// Will return an error if hyper cant bind to the given socket.
+    #[deprecated(
+        since = "0.6.2",
+        note = "Use `prometheus_exporter::Exporter::start` instead"
+    )]
     pub fn run(addr: &SocketAddr) -> Result<(), StartError> {
         let service = move || {
             let encoder = TextEncoder::new();
@@ -518,6 +534,10 @@ impl PrometheusExporter {
     /// # Errors
     /// Will return an error if hyper cant bind to the given socket.
     #[must_use]
+    #[deprecated(
+        since = "0.6.2",
+        note = "Use `prometheus_exporter::Exporter::wait_request` instead"
+    )]
     pub fn run_and_notify(addr: SocketAddr) -> (OldReceiver<Update>, Sender<FinishedUpdate>) {
         let (update_sender, update_receiver) = bounded(0);
         let (finished_sender, finished_receiver) = bounded(0);
@@ -559,6 +579,10 @@ impl PrometheusExporter {
     /// message to update the metrics and wait inbetween for the given
     /// duration.
     #[must_use]
+    #[deprecated(
+        since = "0.6.2",
+        note = "Use `prometheus_exporter::Exporter::wait_duration` instead"
+    )]
     pub fn run_and_repeat(
         addr: SocketAddr,
         duration: std::time::Duration,
