@@ -4,8 +4,8 @@
 [![crates.io](https://img.shields.io/crates/v/prometheus_exporter.svg)](https://crates.io/crates/prometheus_exporter)
 [![docs.rs](https://docs.rs/prometheus_exporter/badge.svg)](https://docs.rs/prometheus_exporter)
 
-Helper libary to export prometheus metrics using hyper. It's intended to help
-writing prometheus exporters without the need to setup and maintain a http
+Helper libary to export prometheus metrics using tiny-http. It's intended to
+help writing prometheus exporters without the need to setup and maintain a http
 webserver. If the program also uses a http server for other purposes this
 package is probably not the best way and
 [rust-prometheus](https://github.com/pingcap/rust-prometheus) should be used
@@ -13,14 +13,14 @@ directly.
 
 It uses [rust-prometheus](https://github.com/pingcap/rust-prometheus) for
 collecting and rendering the prometheus metrics and
-[hyper](https://github.com/hyperium/hyper) for exposing the metrics through
-http.
+[tiny-http](https://github.com/tiny-http/tiny-http) for exposing the metrics
+through http.
 
 **NOTICE:** You have to use the same prometheus crate version that is used by
 this crate to make sure that the global registrar use by the prometheus macros
 works as expected. This crate re-exports the prometheuse crate to make it easier
 to keep versions in sync (see examples). Currently this crate uses prometheus
-version `0.9`.
+version `0.10`.
 
 ## Usage
 
@@ -31,27 +31,35 @@ Add this to your `Cargo.toml`:
 prometheus_exporter = "0.6"
 ```
 
-There are three ways on how to use the exporter:
+The most basic way to use this crate is to run the following:
+```rust
+prometheus_exporter::start("0.0.0.0:9184".parse().unwrap()).unwrap())
+```
 
-* `PrometheusExporter::run`: Just starts the hyper http server and exports
-    metrics from the global prometheus register under the path `/metrics`.
-    Allows the most freedom on how and when to update/generate metrics.
+This will start the exporter and bind the http server to `0.0.0.0:9184`. After
+that you can just update the metrics how you see fit. As long as those metrics
+are put into the global prometheus registry the changed metrics will be
+exported.
 
-* `PrometheusExporter::run_and_notify`: Starts the http server and opens
-    channels to allow notification of when a request is made. This is usefull
-    for cases where metrics should be updated everytime somebody calls the
-    `/metrics` path.
+Another way to use the crate is like this:
 
-* `PrometheusExporter::run_and_repeat`: Starts the http server and opens
-    channels that will send a message to the original caller when a duration
-    inteval is reached. This will be repeated forever. This is usefull for cases
-    where metrics should be gathered in a set interval. For example if the
-    metric collection is expensive it makes more sense to not collect the
-    metrics all the time.
+```rust
+let exporter = prometheus_exporter::start("0.0.0.0:9184".parse().unwrap()).unwrap());
+let guard = exporter.wait_request()
+```
 
-For examples on how to use `prometheus_exporter` see the examples folder.
+This will block the current thread until a request has been received on the http
+server. It also returns a guard which will make the http server wait until the
+guard is dropped. This is useful to always export consistent metrics as all of
+the metrics can be updated before they get exported.
 
-A very simple example looks like this (from `examples/simple/src/main.rs`):
+See the [documentation](https://docs.rs/prometheus_exporter) and the
+[examples](/examples) for more information on how to use this crate.
+
+## Basic Example
+
+A very simple example looks like this (from
+[`examples/simple.rs`](/examples/simple.rs)):
 
 ```rust
 // Will create an exporter with a single metric that does not change
@@ -60,10 +68,8 @@ use env_logger::{
     Builder,
     Env,
 };
-use prometheus_exporter::{
-    PrometheusExporter,
-    prometheus::register_gauge,
-};
+use log::info;
+use prometheus_exporter::prometheus::register_gauge;
 use std::net::SocketAddr;
 
 fn main() {
@@ -76,12 +82,20 @@ fn main() {
     let addr: SocketAddr = addr_raw.parse().expect("can not parse listen addr");
 
     // Create metric
-    let metric =
-        register_gauge!("the_answer", "to everything").expect("can not create gauge the_answer");
+    let metric = register_gauge!("simple_the_answer", "to everything")
+        .expect("can not create gauge simple_the_answer");
 
     metric.set(42.0);
 
-    // Start exporter and makes metrics available under http://0.0.0.0:9184/metrics
-    PrometheusExporter::run(&addr).expect("can not run exporter");
+    // Start exporter
+    prometheus_exporter::start(addr).expect("can not start exporter");
+
+    // Get metrics from exporter
+    let body = reqwest::blocking::get(&format!("http://{}/metrics", addr_raw))
+        .expect("can not get metrics from exporter")
+        .text()
+        .expect("can not body text from request");
+
+    info!("Exporter metrics:\n{}", body);
 }
 ```
