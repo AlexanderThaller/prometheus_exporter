@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using hyper."
@@ -16,14 +16,28 @@ edition = "2018"
 travis-ci = { repository = "AlexanderThaller/prometheus_exporter" }
 
 [package.metadata.docs.rs]
-features = ["log"]
+features = ["logging", "internal_metrics"]
 
 [features]
-# disable logging by disabling log feature
-default = ["log"]
+# Feature logging enables the start and request logging of the server.
+# Disable `prometheus_exporter` metrics by disabling internal_metrics feature
+default = ["logging", "internal_metrics"]
+logging = ["log"]
+internal_metrics = ["lazy_static"]
 
 [dependencies]
+ascii = "1"
 crossbeam-channel = "0.4"
+crossbeam-utils = "0.8"
 hyper = "0.12"
+lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
-prometheus = { version = "0.9", default-features = false }
+prometheus = { version = "0.10", default-features = false }
+thiserror = "1"
+tiny_http = { version = "0.7", default-features = false }
+
+[dev-dependencies]
+env_logger = "0.8"
+reqwest = { version = "0.10", features = ["blocking"] }
+rand = "0.7"
+log = { version = "0.4" }

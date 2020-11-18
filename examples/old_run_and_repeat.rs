@@ -7,9 +7,9 @@ use env_logger::{
 };
 use log::info;
 use prometheus_exporter::{
+    prometheus::register_gauge,
     FinishedUpdate,
     PrometheusExporter,
-    prometheus::register_gauge
 };
 use rand::Rng;
 use std::net::SocketAddr;

@@ -5,8 +5,8 @@ use env_logger::{
     Env,
 };
 use prometheus_exporter::{
-    PrometheusExporter,
     prometheus::register_gauge,
+    PrometheusExporter,
 };
 use std::net::SocketAddr;
 
