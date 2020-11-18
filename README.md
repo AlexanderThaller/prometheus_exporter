@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-prometheus_exporter = "0.6"
+prometheus_exporter = "0.7"
 ```
 
 The most basic way to use this crate is to run the following:
