@@ -1,21 +1,22 @@
 //! Helper to export prometheus metrics via http.
 
 #![deny(missing_docs)]
+#![forbid(unsafe_code)]
+#![warn(clippy::pedantic)]
 #![warn(clippy::unwrap_used)]
 #![warn(rust_2018_idioms, unused_lifetimes, missing_debug_implementations)]
-#![forbid(unsafe_code)]
 
 // Reexport prometheus so version missmatches don't happen.
 pub use prometheus;
 
 #[cfg(feature = "internal_metrics")]
 use crate::prometheus::{
-    register_counter,
-    register_gauge,
     register_histogram,
-    Counter,
-    Gauge,
+    register_int_counter,
+    register_int_gauge,
     Histogram,
+    IntCounter,
+    IntGauge,
 };
 #[cfg(feature = "internal_metrics")]
 use lazy_static::lazy_static;
@@ -56,12 +57,12 @@ use tiny_http::{
 
 #[cfg(feature = "internal_metrics")]
 lazy_static! {
-    static ref HTTP_COUNTER: Counter = register_counter!(
+    static ref HTTP_COUNTER: IntCounter = register_int_counter!(
         "prometheus_exporter_requests_total",
         "Number of HTTP requests made."
     )
     .expect("can not create HTTP_COUNTER metric. this should never fail");
-    static ref HTTP_BODY_GAUGE: Gauge = register_gauge!(
+    static ref HTTP_BODY_GAUGE: IntGauge = register_int_gauge!(
         "prometheus_exporter_response_size_bytes",
         "The HTTP response sizes in bytes."
     )
@@ -80,7 +81,11 @@ pub enum Error {
     /// [`tiny_http::Server::http`] fails.
     #[error("can not start http server: {0}")]
     ServerStart(Box<dyn std::error::Error + Send + Sync + 'static>),
+}
 
+/// Errors that can occur while handling requests.
+#[derive(Debug, Error)]
+enum HandlerError {
     /// Returned when the encoding of the metrics by
     /// [`prometheus::Encoder::encode`] fails.
     #[error("can not encode metrics: {0}")]
@@ -111,27 +116,24 @@ struct Server {}
 
 /// Create and start a new exporter which uses the given socket address to
 /// export the metrics.
+/// # Errors
+///
+/// Will return `Err` if the http server fails to start for any reason.
 pub fn start(binding: SocketAddr) -> Result<Exporter, Error> {
     Builder::new(binding).start()
 }
 
 impl Builder {
     /// Create a new builder with the given binding.
+    #[must_use]
     pub fn new(binding: SocketAddr) -> Builder {
         Self { binding }
     }
 
-    /// Change binding of the builder to given binding.
-    pub fn binding(self, binding: SocketAddr) -> Builder {
-        Self { binding }
-    }
-
-    /// Create a new exporter based on the information from the builder.
-    pub fn build(self) -> Exporter {
-        todo!()
-    }
-
     /// Create and start new exporter based on the information from the builder.
+    /// # Errors
+    ///
+    /// Will return `Err` if the http server fails to start for any reason.
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
         let is_waiting = Arc::new(AtomicBool::new(false));
@@ -149,6 +151,7 @@ impl Builder {
 
 impl Exporter {
     /// Return new builder which will create a exporter once built.
+    #[must_use]
     pub fn builder(binding: SocketAddr) -> Builder {
         Builder::new(binding)
     }
@@ -210,7 +213,7 @@ impl Server {
         encoder: &TextEncoder,
         request_sender: &SyncSender<WaitGroup>,
         is_waiting: &Arc<AtomicBool>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
 
@@ -231,24 +234,24 @@ impl Server {
         Self::process_request(request, encoder)
     }
 
-    fn process_request(request: Request, encoder: &TextEncoder) -> Result<(), Error> {
+    fn process_request(request: Request, encoder: &TextEncoder) -> Result<(), HandlerError> {
         let metric_families = prometheus::gather();
         let mut buffer = vec![];
 
         encoder
             .encode(&metric_families, &mut buffer)
-            .map_err(Error::EncodeMetrics)?;
+            .map_err(HandlerError::EncodeMetrics)?;
 
         #[cfg(feature = "internal_metrics")]
-        HTTP_BODY_GAUGE.set(buffer.len() as f64);
+        HTTP_BODY_GAUGE.set(buffer.len() as i64);
 
         let response = Response::from_data(buffer);
-        request.respond(response).map_err(Error::Response)?;
+        request.respond(response).map_err(HandlerError::Response)?;
 
         Ok(())
     }
 
-    fn handler_redirect(request: Request) -> Result<(), Error> {
+    fn handler_redirect(request: Request) -> Result<(), HandlerError> {
         let response = Response::from_string("try /metrics for metrics\n".to_string())
             .with_status_code(301)
             .with_header(Header {
@@ -259,7 +262,7 @@ impl Server {
                     .expect("can not parse header value. this should never fail"),
             });
 
-        request.respond(response).map_err(Error::Response)?;
+        request.respond(response).map_err(HandlerError::Response)?;
 
         Ok(())
     }
