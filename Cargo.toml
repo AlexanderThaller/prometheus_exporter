@@ -1,9 +1,9 @@
 [package]
 name = "prometheus_exporter"
-version = "0.6.2"
+version = "0.7.0"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
-description = "Helper libary to export prometheus metrics using hyper."
+description = "Helper libary to export prometheus metrics using tiny-http."
 documentation = "https://docs.rs/prometheus_exporter/"
 homepage = "https://github.com/AlexanderThaller/prometheus_exporter"
 readme = "README.md"
@@ -27,9 +27,7 @@ internal_metrics = ["lazy_static"]
 
 [dependencies]
 ascii = "1"
-crossbeam-channel = "0.4"
 crossbeam-utils = "0.8"
-hyper = "0.12"
 lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.10", default-features = false }
