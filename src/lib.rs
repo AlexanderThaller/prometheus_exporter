@@ -1,5 +1,8 @@
 //! Helper to export prometheus metrics via http.
 //!
+//! Information on how to use the prometheus crate can be found at
+//! [`prometheus`].
+//!
 //! # Basic Example
 //! The most basic usage of this crate is to just start a http server at the
 //! given binding which will export all metrics registered on the global
@@ -52,12 +55,15 @@
 //! // Wait will return a waitgroup so we need to bind the return value.
 //! // The webserver will wait with responding to the request until the
 //! // waitgroup has been dropped
-//! let _ = exporter.wait();
+//! let guard = exporter.wait_request();
 //!
 //! // Updates can safely happen after the wait. This has the advantage
 //! // that metrics are always in sync with the exporter so you won't
 //! // get half updated metrics.
 //! counter.inc();
+//!
+//! // Drop the guard after metrics have been updated.
+//! drop(guard);
 //! ```
 //!
 //! # Update periodically
@@ -89,8 +95,9 @@
 //! // Wait for one second and then update the metrics. `wait_duration` will
 //! // return a mutex guard which makes sure that the http server won't
 //! // respond while the metrics get updated.
-//! let _ = exporter.wait_duration(std::time::Duration::from_millis(1000));
+//! let guard = exporter.wait_duration(std::time::Duration::from_millis(1000));
 //! counter.inc();
+//! drop(guard);
 //! ```
 //!
 //! You can find examples under [`/examples`](https://github.com/AlexanderThaller/prometheus_exporter/tree/master/examples).
@@ -276,11 +283,11 @@ impl Exporter {
         Builder::new(binding)
     }
 
-    /// Wait until a new request comes in. Returns a waitgroup to make the http
-    /// server wait until the metrics have been updated.
-    #[must_use = "not using the waitgroup will result in the exporter returning the prometheus \
-                  data immediately over http"]
-    pub fn wait(&self) -> WaitGroup {
+    /// Wait until a new request comes in. Returns a mutex guard to make the
+    /// http server wait until the metrics have been updated.
+    #[must_use = "not using the guard will result in the exporter returning the prometheus data \
+                  immediately over http"]
+    pub fn wait_request(&self) -> MutexGuard<'_, ()> {
         self.is_waiting.store(true, Ordering::SeqCst);
 
         let update_waitgroup = self
@@ -290,13 +297,20 @@ impl Exporter {
 
         self.is_waiting.store(false, Ordering::SeqCst);
 
-        update_waitgroup
+        let guard = self
+            .update_lock
+            .lock()
+            .expect("poisioned mutex. should never happen");
+
+        update_waitgroup.wait();
+
+        guard
     }
 
     /// Wait for given duration. Returns a mutex guard to make the http
     /// server wait until the metrics have been updated.
-    #[must_use = "not using the waitgroup will result in the exporter returning the prometheus \
-                  data immediately over http"]
+    #[must_use = "not using the guard will result in the exporter returning the prometheus data \
+                  immediately over http"]
     pub fn wait_duration(&self, duration: Duration) -> MutexGuard<'_, ()> {
         thread::sleep(duration);
 
@@ -317,7 +331,7 @@ impl Server {
 
         thread::spawn(move || {
             #[cfg(feature = "logging")]
-            info!("listening on http://{}", binding);
+            info!("exporting metrics to http://{}/metrics", binding);
 
             let encoder = TextEncoder::new();
 
@@ -373,7 +387,6 @@ impl Server {
             .lock()
             .expect("poisioned mutex. should never happen");
 
-        println!("process_request");
         Self::process_request(request, encoder)
     }
 
