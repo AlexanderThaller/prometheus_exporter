@@ -31,10 +31,17 @@ use crate::prometheus::{
 };
 use std::{
     net::SocketAddr,
-    sync::mpsc::{
-        sync_channel,
-        Receiver,
-        SyncSender,
+    sync::{
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+        mpsc::{
+            sync_channel,
+            Receiver,
+            SyncSender,
+        },
+        Arc,
     },
     thread,
 };
@@ -95,6 +102,7 @@ pub struct Builder {
 pub struct Exporter {
     notify_sender: SyncSender<()>,
     request_receiver: Receiver<()>,
+    is_waiting: Arc<AtomicBool>,
 }
 
 /// Helper to export prometheus metrics via http.
@@ -127,13 +135,15 @@ impl Builder {
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
         let (notify_sender, notify_receiver) = sync_channel(0);
+        let is_waiting = Arc::new(AtomicBool::new(false));
 
         let exporter = Exporter {
             request_receiver,
             notify_sender,
+            is_waiting: Arc::clone(&is_waiting),
         };
 
-        Server::start(self.binding, request_sender, notify_receiver)?;
+        Server::start(self.binding, request_sender, notify_receiver, is_waiting)?;
 
         Ok(exporter)
     }
@@ -147,9 +157,13 @@ impl Exporter {
 
     /// Wait until a new request comes in.
     pub fn wait(&self) {
+        self.is_waiting.store(true, Ordering::SeqCst);
+
         self.request_receiver
             .recv()
             .expect("can not receive from request_receiver channel. this should never happen");
+
+        self.is_waiting.store(false, Ordering::SeqCst);
     }
 
     /// Notify exporter that metrics have been updated and should be sent
@@ -166,6 +180,7 @@ impl Server {
         binding: SocketAddr,
         request_sender: SyncSender<()>,
         notify_receiver: Receiver<()>,
+        is_waiting: Arc<AtomicBool>,
     ) -> Result<(), Error> {
         let server = HTTPServer::http(&binding).map_err(Error::ServerStart)?;
 
@@ -177,9 +192,13 @@ impl Server {
 
             for request in server.incoming_requests() {
                 if let Err(err) = match request.url() {
-                    "/metrics" => {
-                        Self::handler_metrics(request, &encoder, &request_sender, &notify_receiver)
-                    }
+                    "/metrics" => Self::handler_metrics(
+                        request,
+                        &encoder,
+                        &request_sender,
+                        &notify_receiver,
+                        &is_waiting,
+                    ),
 
                     _ => Self::handler_redirect(request),
                 } {
@@ -201,6 +220,7 @@ impl Server {
         encoder: &TextEncoder,
         request_sender: &SyncSender<()>,
         notify_receiver: &Receiver<()>,
+        is_waiting: &Arc<AtomicBool>,
     ) -> Result<(), Error> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
@@ -208,13 +228,15 @@ impl Server {
         #[cfg(feature = "internal_metrics")]
         let _timer = HTTP_REQ_HISTOGRAM.start_timer();
 
-        request_sender
-            .send(())
-            .expect("can not send to request_sender. this should never happen");
+        if is_waiting.load(Ordering::SeqCst) {
+            request_sender
+                .send(())
+                .expect("can not send to request_sender. this should never happen");
 
-        notify_receiver
-            .recv()
-            .expect("can not receive from notify_receiver. this should never happen");
+            notify_receiver
+                .recv()
+                .expect("can not receive from notify_receiver. this should never happen");
+        }
 
         Self::process_request(request, encoder)
     }
