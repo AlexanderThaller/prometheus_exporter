@@ -44,8 +44,11 @@ use std::{
             SyncSender,
         },
         Arc,
+        Mutex,
+        MutexGuard,
     },
     thread,
+    time::Duration,
 };
 use thiserror::Error;
 use tiny_http::{
@@ -108,6 +111,7 @@ pub struct Builder {
 pub struct Exporter {
     request_receiver: Receiver<WaitGroup>,
     is_waiting: Arc<AtomicBool>,
+    update_lock: Arc<Mutex<()>>,
 }
 
 /// Helper to export prometheus metrics via http.
@@ -137,13 +141,15 @@ impl Builder {
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
         let is_waiting = Arc::new(AtomicBool::new(false));
+        let update_lock = Arc::new(Mutex::new(()));
 
         let exporter = Exporter {
             request_receiver,
             is_waiting: Arc::clone(&is_waiting),
+            update_lock: Arc::clone(&update_lock),
         };
 
-        Server::start(self.binding, request_sender, is_waiting)?;
+        Server::start(self.binding, request_sender, is_waiting, update_lock)?;
 
         Ok(exporter)
     }
@@ -156,20 +162,33 @@ impl Exporter {
         Builder::new(binding)
     }
 
-    /// Wait until a new request comes in.
+    /// Wait until a new request comes in. Returns a waitgroup to make the http
+    /// server wait until the metrics have been updated.
     #[must_use = "not using the waitgroup will result in the exporter returning the prometheus \
                   data immediately over http"]
     pub fn wait(&self) -> WaitGroup {
         self.is_waiting.store(true, Ordering::SeqCst);
 
-        let update_barrier = self
+        let update_waitgroup = self
             .request_receiver
             .recv()
             .expect("can not receive from request_receiver channel. this should never happen");
 
         self.is_waiting.store(false, Ordering::SeqCst);
 
-        update_barrier
+        update_waitgroup
+    }
+
+    /// Wait for given duration. Returns a mutex guard to make the http
+    /// server wait until the metrics have been updated.
+    #[must_use = "not using the waitgroup will result in the exporter returning the prometheus \
+                  data immediately over http"]
+    pub fn wait_duration(&self, duration: Duration) -> MutexGuard<'_, ()> {
+        thread::sleep(duration);
+
+        self.update_lock
+            .lock()
+            .expect("poisioned mutex. should never happen")
     }
 }
 
@@ -178,6 +197,7 @@ impl Server {
         binding: SocketAddr,
         request_sender: SyncSender<WaitGroup>,
         is_waiting: Arc<AtomicBool>,
+        update_lock: Arc<Mutex<()>>,
     ) -> Result<(), Error> {
         let server = HTTPServer::http(&binding).map_err(Error::ServerStart)?;
 
@@ -189,9 +209,13 @@ impl Server {
 
             for request in server.incoming_requests() {
                 if let Err(err) = match request.url() {
-                    "/metrics" => {
-                        Self::handler_metrics(request, &encoder, &request_sender, &is_waiting)
-                    }
+                    "/metrics" => Self::handler_metrics(
+                        request,
+                        &encoder,
+                        &request_sender,
+                        &is_waiting,
+                        &update_lock,
+                    ),
 
                     _ => Self::handler_redirect(request),
                 } {
@@ -213,6 +237,7 @@ impl Server {
         encoder: &TextEncoder,
         request_sender: &SyncSender<WaitGroup>,
         is_waiting: &Arc<AtomicBool>,
+        update_lock: &Arc<Mutex<()>>,
     ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
@@ -229,6 +254,10 @@ impl Server {
 
             wg.wait();
         }
+
+        let _lock = update_lock
+            .lock()
+            .expect("poisioned mutex. should never happen");
 
         println!("process_request");
         Self::process_request(request, encoder)
