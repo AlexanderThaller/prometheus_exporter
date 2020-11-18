@@ -29,6 +29,7 @@ use crate::prometheus::{
     Encoder,
     TextEncoder,
 };
+use crossbeam_utils::sync::WaitGroup;
 use std::{
     net::SocketAddr,
     sync::{
@@ -100,8 +101,7 @@ pub struct Builder {
 /// Helper to export prometheus metrics via http.
 #[derive(Debug)]
 pub struct Exporter {
-    notify_sender: SyncSender<()>,
-    request_receiver: Receiver<()>,
+    request_receiver: Receiver<WaitGroup>,
     is_waiting: Arc<AtomicBool>,
 }
 
@@ -134,16 +134,14 @@ impl Builder {
     /// Create and start new exporter based on the information from the builder.
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
-        let (notify_sender, notify_receiver) = sync_channel(0);
         let is_waiting = Arc::new(AtomicBool::new(false));
 
         let exporter = Exporter {
             request_receiver,
-            notify_sender,
             is_waiting: Arc::clone(&is_waiting),
         };
 
-        Server::start(self.binding, request_sender, notify_receiver, is_waiting)?;
+        Server::start(self.binding, request_sender, is_waiting)?;
 
         Ok(exporter)
     }
@@ -156,30 +154,26 @@ impl Exporter {
     }
 
     /// Wait until a new request comes in.
-    pub fn wait(&self) {
+    #[must_use = "not using the waitgroup will result in the exporter returning the prometheus \
+                  data immediately over http"]
+    pub fn wait(&self) -> WaitGroup {
         self.is_waiting.store(true, Ordering::SeqCst);
 
-        self.request_receiver
+        let update_barrier = self
+            .request_receiver
             .recv()
             .expect("can not receive from request_receiver channel. this should never happen");
 
         self.is_waiting.store(false, Ordering::SeqCst);
-    }
 
-    /// Notify exporter that metrics have been updated and should be sent
-    /// through the http server.
-    pub fn notify(&self) {
-        self.notify_sender
-            .send(())
-            .expect("can not send to notify_sender channel. this should never happen");
+        update_barrier
     }
 }
 
 impl Server {
     fn start(
         binding: SocketAddr,
-        request_sender: SyncSender<()>,
-        notify_receiver: Receiver<()>,
+        request_sender: SyncSender<WaitGroup>,
         is_waiting: Arc<AtomicBool>,
     ) -> Result<(), Error> {
         let server = HTTPServer::http(&binding).map_err(Error::ServerStart)?;
@@ -192,13 +186,9 @@ impl Server {
 
             for request in server.incoming_requests() {
                 if let Err(err) = match request.url() {
-                    "/metrics" => Self::handler_metrics(
-                        request,
-                        &encoder,
-                        &request_sender,
-                        &notify_receiver,
-                        &is_waiting,
-                    ),
+                    "/metrics" => {
+                        Self::handler_metrics(request, &encoder, &request_sender, &is_waiting)
+                    }
 
                     _ => Self::handler_redirect(request),
                 } {
@@ -218,8 +208,7 @@ impl Server {
     fn handler_metrics(
         request: Request,
         encoder: &TextEncoder,
-        request_sender: &SyncSender<()>,
-        notify_receiver: &Receiver<()>,
+        request_sender: &SyncSender<WaitGroup>,
         is_waiting: &Arc<AtomicBool>,
     ) -> Result<(), Error> {
         #[cfg(feature = "internal_metrics")]
@@ -229,15 +218,16 @@ impl Server {
         let _timer = HTTP_REQ_HISTOGRAM.start_timer();
 
         if is_waiting.load(Ordering::SeqCst) {
+            let wg = WaitGroup::new();
+
             request_sender
-                .send(())
+                .send(wg.clone())
                 .expect("can not send to request_sender. this should never happen");
 
-            notify_receiver
-                .recv()
-                .expect("can not receive from notify_receiver. this should never happen");
+            wg.wait();
         }
 
+        println!("process_request");
         Self::process_request(request, encoder)
     }
 
