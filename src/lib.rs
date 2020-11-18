@@ -1,4 +1,117 @@
 //! Helper to export prometheus metrics via http.
+//!
+//! # Basic Example
+//! The most basic usage of this crate is to just start a http server at the
+//! given binding which will export all metrics registered on the global
+//! prometheus registry:
+//!
+//! ```rust
+//! use prometheus_exporter::{
+//!     self,
+//!     prometheus::register_counter,
+//! };
+//!
+//! let binding = "127.0.0.1:9184".parse().unwrap();
+//! // Will create an exporter and start the http server using the given binding.
+//! // If the webserver can't bind to the given binding it will fail with an error.
+//! prometheus_exporter::start(binding).unwrap();
+//!
+//! // Create a counter using the global prometheus registry and increment it by one.
+//! // Notice that the macro is coming from the reexported prometheus crate instead
+//! // of the original crate. This is important as different versions of the
+//! // prometheus crate have incompatible global registries.
+//! let counter = register_counter!("user_exporter_counter", "help").unwrap();
+//! counter.inc();
+//! ```
+//!
+//! # Wait for request
+//! A probably more useful example in which the exporter waits until a request
+//! comes in and then updates the metrics on the fly:
+//! ```
+//! use prometheus_exporter::{
+//!     self,
+//!     prometheus::register_counter,
+//! };
+//! # let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+//! # {
+//! #   let barrier = barrier.clone();
+//! #   std::thread::spawn(move || {
+//! #     println!("client barrier");
+//! #     barrier.wait();
+//! #     let body = reqwest::blocking::get("http://127.0.0.1:9185").unwrap().text().unwrap();
+//! #     println!("body = {:?}", body);
+//! #   });
+//! # }
+//!
+//! let binding = "127.0.0.1:9185".parse().unwrap();
+//! let exporter = prometheus_exporter::start(binding).unwrap();
+//! # barrier.wait();
+//!
+//! let counter = register_counter!("example_exporter_counter", "help").unwrap();
+//!
+//! // Wait will return a waitgroup so we need to bind the return value.
+//! // The webserver will wait with responding to the request until the
+//! // waitgroup has been dropped
+//! let _ = exporter.wait();
+//!
+//! // Updates can safely happen after the wait. This has the advantage
+//! // that metrics are always in sync with the exporter so you won't
+//! // get half updated metrics.
+//! counter.inc();
+//! ```
+//!
+//! # Update periodically
+//! Another use case is to update the metrics periodically instead of updating
+//! them for each request. This could be useful if the generation of the
+//! metrics is expensive and shouldn't happen all the time.
+//! ```
+//! use prometheus_exporter::{
+//!     self,
+//!     prometheus::register_counter,
+//! };
+//! # let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+//! # {
+//! #   let barrier = barrier.clone();
+//! #   std::thread::spawn(move || {
+//! #     println!("client barrier");
+//! #     barrier.wait();
+//! #     let body = reqwest::blocking::get("http://127.0.0.1:9186").unwrap().text().unwrap();
+//! #     println!("body = {:?}", body);
+//! #   });
+//! # }
+//!
+//! let binding = "127.0.0.1:9186".parse().unwrap();
+//! let exporter = prometheus_exporter::start(binding).unwrap();
+//! # barrier.wait();
+//!
+//! let counter = register_counter!("example_exporter_counter", "help").unwrap();
+//!
+//! // Wait for one second and then update the metrics. `wait_duration` will
+//! // return a mutex guard which makes sure that the http server won't
+//! // respond while the metrics get updated.
+//! let _ = exporter.wait_duration(std::time::Duration::from_millis(1000));
+//! counter.inc();
+//! ```
+//!
+//! You can find examples under [`/examples`](https://github.com/AlexanderThaller/prometheus_exporter/tree/master/examples).
+//!
+//! # Crate Features
+//! ## `logging`
+//! *Enabled by default*: yes
+//!
+//! Enables startup logging and failed request logging using the
+//! [`log`](https://crates.io/crates/log) crate.
+//!
+//! ## `internal_metrics`
+//! *Enabled by default*: yes
+//!
+//! Enables the registration of internal metrics used by the crate. Will enable
+//! the following metrics:
+//! * `prometheus_exporter_requests_total`: Number of HTTP requests received.
+//! * `prometheus_exporter_response_size_bytes`: The HTTP response sizes in
+//!   bytes.
+//! * `prometheus_exporter_request_duration_seconds`: The HTTP request latencies
+//!   in seconds.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -62,7 +175,7 @@ use tiny_http::{
 lazy_static! {
     static ref HTTP_COUNTER: IntCounter = register_int_counter!(
         "prometheus_exporter_requests_total",
-        "Number of HTTP requests made."
+        "Number of HTTP requests received."
     )
     .expect("can not create HTTP_COUNTER metric. this should never fail");
     static ref HTTP_BODY_GAUGE: IntGauge = register_int_gauge!(
@@ -122,7 +235,7 @@ struct Server {}
 /// export the metrics.
 /// # Errors
 ///
-/// Will return `Err` if the http server fails to start for any reason.
+/// Will return [`enum@Error`] if the http server fails to start for any reason.
 pub fn start(binding: SocketAddr) -> Result<Exporter, Error> {
     Builder::new(binding).start()
 }
@@ -137,7 +250,8 @@ impl Builder {
     /// Create and start new exporter based on the information from the builder.
     /// # Errors
     ///
-    /// Will return `Err` if the http server fails to start for any reason.
+    /// Will return [`enum@Error`] if the http server fails to start for any
+    /// reason.
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
         let is_waiting = Arc::new(AtomicBool::new(false));

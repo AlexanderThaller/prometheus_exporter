@@ -19,7 +19,7 @@ travis-ci = { repository = "AlexanderThaller/prometheus_exporter" }
 features = ["logging", "internal_metrics"]
 
 [features]
-# feature logging enables 
+# feature logging enables the start and request logging of the server.
 # disable `prometheus_exporter` metrics by disabling internal_metrics feature
 default = ["logging", "internal_metrics"]
 logging = ["log"]
@@ -33,3 +33,6 @@ log = { version = "0.4", optional = true }
 prometheus = { version = "0.10", default-features = false }
 thiserror = "1"
 tiny_http = { version = "0.7", default-features = false }
+
+[dev-dependencies]
+reqwest = { version = "0.10", features = ["blocking"] }
