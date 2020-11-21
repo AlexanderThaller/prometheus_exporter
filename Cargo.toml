@@ -7,7 +7,6 @@ description = "Helper libary to export prometheus metrics using tiny-http."
 documentation = "https://docs.rs/prometheus_exporter/"
 homepage = "https://github.com/AlexanderThaller/prometheus_exporter"
 keywords = ["prometheus-exporter", "prometheus-metrics", "metrics", "helper-libary", "rust-prometheus"]
-categories = ["helper-libary", "prometheus-exporter"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/AlexanderThaller/prometheus_exporter"
