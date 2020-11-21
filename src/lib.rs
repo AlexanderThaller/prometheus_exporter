@@ -126,6 +126,9 @@
 #![warn(clippy::unwrap_used)]
 #![warn(rust_2018_idioms, unused_lifetimes, missing_debug_implementations)]
 
+#[cfg(test)]
+mod test;
+
 // Reexport prometheus so version missmatches don't happen.
 pub use prometheus;
 
