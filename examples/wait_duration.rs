@@ -21,7 +21,7 @@ fn main() {
 
     // Start exporter and update metrics every five seconds.
     let exporter = prometheus_exporter::start(addr).expect("can not start exporter");
-    let duration = std::time::Duration::from_secs(5);
+    let duration = std::time::Duration::from_millis(1000);
 
     // Create metric
     let random = register_gauge!("run_and_repeat_random", "will set a random value")

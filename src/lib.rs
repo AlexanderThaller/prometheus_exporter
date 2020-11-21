@@ -48,10 +48,10 @@
 //!
 //! let binding = "127.0.0.1:9185".parse().unwrap();
 //! let exporter = prometheus_exporter::start(binding).unwrap();
-//! # barrier.wait();
 //!
 //! let counter = register_counter!("example_exporter_counter", "help").unwrap();
 //!
+//! # barrier.wait();
 //! // Wait will return a waitgroup so we need to bind the return value.
 //! // The webserver will wait with responding to the request until the
 //! // waitgroup has been dropped
@@ -88,14 +88,14 @@
 //!
 //! let binding = "127.0.0.1:9186".parse().unwrap();
 //! let exporter = prometheus_exporter::start(binding).unwrap();
-//! # barrier.wait();
 //!
 //! let counter = register_counter!("example_exporter_counter", "help").unwrap();
 //!
 //! // Wait for one second and then update the metrics. `wait_duration` will
 //! // return a mutex guard which makes sure that the http server won't
 //! // respond while the metrics get updated.
-//! let guard = exporter.wait_duration(std::time::Duration::from_millis(1000));
+//! let guard = exporter.wait_duration(std::time::Duration::from_millis(100));
+//! # barrier.wait();
 //! counter.inc();
 //! drop(guard);
 //! ```
@@ -150,7 +150,6 @@ use crate::prometheus::{
     Encoder,
     TextEncoder,
 };
-use crossbeam_utils::sync::WaitGroup;
 use std::{
     net::SocketAddr,
     sync::{
@@ -164,6 +163,7 @@ use std::{
             SyncSender,
         },
         Arc,
+        Barrier,
         Mutex,
         MutexGuard,
     },
@@ -229,7 +229,7 @@ pub struct Builder {
 /// Helper to export prometheus metrics via http.
 #[derive(Debug)]
 pub struct Exporter {
-    request_receiver: Receiver<WaitGroup>,
+    request_receiver: Receiver<Arc<Barrier>>,
     is_waiting: Arc<AtomicBool>,
     update_lock: Arc<Mutex<()>>,
 }
@@ -323,7 +323,7 @@ impl Exporter {
 impl Server {
     fn start(
         binding: SocketAddr,
-        request_sender: SyncSender<WaitGroup>,
+        request_sender: SyncSender<Arc<Barrier>>,
         is_waiting: Arc<AtomicBool>,
         update_lock: Arc<Mutex<()>>,
     ) -> Result<(), Error> {
@@ -363,7 +363,7 @@ impl Server {
     fn handler_metrics(
         request: Request,
         encoder: &TextEncoder,
-        request_sender: &SyncSender<WaitGroup>,
+        request_sender: &SyncSender<Arc<Barrier>>,
         is_waiting: &Arc<AtomicBool>,
         update_lock: &Arc<Mutex<()>>,
     ) -> Result<(), HandlerError> {
@@ -371,21 +371,24 @@ impl Server {
         HTTP_COUNTER.inc();
 
         #[cfg(feature = "internal_metrics")]
-        let _timer = HTTP_REQ_HISTOGRAM.start_timer();
+        let timer = HTTP_REQ_HISTOGRAM.start_timer();
 
         if is_waiting.load(Ordering::SeqCst) {
-            let wg = WaitGroup::new();
+            let barrier = Arc::new(Barrier::new(2));
 
             request_sender
-                .send(wg.clone())
+                .send(Arc::clone(&barrier))
                 .expect("can not send to request_sender. this should never happen");
 
-            wg.wait();
+            barrier.wait();
         }
 
         let _lock = update_lock
             .lock()
             .expect("poisioned mutex. should never happen");
+
+        #[cfg(feature = "internal_metrics")]
+        drop(timer);
 
         Self::process_request(request, encoder)
     }
