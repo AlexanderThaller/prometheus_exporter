@@ -20,7 +20,7 @@ through http.
 this crate to make sure that the global registrar use by the prometheus macros
 works as expected. This crate re-exports the prometheuse crate to make it easier
 to keep versions in sync (see examples). Currently this crate uses prometheus
-version `0.10`.
+version `0.11`.
 
 For information on how to migrate from an older crate version follow
 [MIGRATION](/MIGRATION.md).
@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-prometheus_exporter = "0.7"
+prometheus_exporter = "0.8"
 ```
 
 The most basic way to use this crate is to run the following:
