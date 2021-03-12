@@ -207,6 +207,10 @@ pub enum Error {
     /// [`tiny_http::Server::http`] fails.
     #[error("can not start http server: {0}")]
     ServerStart(Box<dyn std::error::Error + Send + Sync + 'static>),
+    /// Returned when supplying a non-ascii endpoint to
+    /// [`Builder::with_endpoint`].
+    #[error("supplied endpoint is not valid ascii: {0}")]
+    EndpointNotAscii(String),
 }
 
 /// Errors that can occur while handling requests.
@@ -227,6 +231,15 @@ enum HandlerError {
 #[derive(Debug)]
 pub struct Builder {
     binding: SocketAddr,
+    endpoint: Endpoint,
+}
+
+#[derive(Debug)]
+struct Endpoint(String);
+impl Default for Endpoint {
+    fn default() -> Self {
+        Self("/metrics".to_string())
+    }
 }
 
 /// Helper to export prometheus metrics via http.
@@ -254,7 +267,26 @@ impl Builder {
     /// Create a new builder with the given binding.
     #[must_use]
     pub fn new(binding: SocketAddr) -> Builder {
-        Self { binding }
+        Self {
+            binding,
+            endpoint: Endpoint::default(),
+        }
+    }
+
+    /// Sets the endpoint that the metrics will be served on. If the endpoint is
+    /// not set with this method then the default `/metrics` will be used.
+    /// # Errors
+    ///
+    /// Will return [`enum@Error`] if the supplied string slice is not valid
+    /// ascii.
+    pub fn with_endpoint(&mut self, endpoint: &str) -> Result<(), Error> {
+        if !endpoint.is_ascii() {
+            return Err(Error::EndpointNotAscii(endpoint.to_string()));
+        }
+        let mut clean_endpoint = String::from('/');
+        clean_endpoint.push_str(endpoint.trim_matches('/'));
+        self.endpoint = Endpoint(clean_endpoint);
+        Ok(())
     }
 
     /// Create and start new exporter based on the information from the builder.
@@ -273,7 +305,13 @@ impl Builder {
             update_lock: Arc::clone(&update_lock),
         };
 
-        Server::start(self.binding, request_sender, is_waiting, update_lock)?;
+        Server::start(
+            self.binding,
+            self.endpoint.0,
+            request_sender,
+            is_waiting,
+            update_lock,
+        )?;
 
         Ok(exporter)
     }
@@ -326,6 +364,7 @@ impl Exporter {
 impl Server {
     fn start(
         binding: SocketAddr,
+        endpoint: String,
         request_sender: SyncSender<Arc<Barrier>>,
         is_waiting: Arc<AtomicBool>,
         update_lock: Arc<Mutex<()>>,
@@ -334,21 +373,21 @@ impl Server {
 
         thread::spawn(move || {
             #[cfg(feature = "logging")]
-            info!("exporting metrics to http://{}/metrics", binding);
+            info!("exporting metrics to http://{}{}", binding, endpoint);
 
             let encoder = TextEncoder::new();
 
             for request in server.incoming_requests() {
-                if let Err(err) = match request.url() {
-                    "/metrics" => Self::handler_metrics(
+                if let Err(err) = if request.url() == endpoint {
+                    Self::handler_metrics(
                         request,
                         &encoder,
                         &request_sender,
                         &is_waiting,
                         &update_lock,
-                    ),
-
-                    _ => Self::handler_redirect(request),
+                    )
+                } else {
+                    Self::handler_redirect(request, &endpoint)
                 } {
                     #[cfg(feature = "logging")]
                     error!("{}", err);
@@ -413,14 +452,14 @@ impl Server {
         Ok(())
     }
 
-    fn handler_redirect(request: Request) -> Result<(), HandlerError> {
-        let response = Response::from_string("try /metrics for metrics\n".to_string())
+    fn handler_redirect(request: Request, endpoint: &str) -> Result<(), HandlerError> {
+        let response = Response::from_string(format!("try {} for metrics\n", endpoint))
             .with_status_code(301)
             .with_header(Header {
                 field: "Location"
                     .parse()
                     .expect("can not parse location header field. this should never fail"),
-                value: ascii::AsciiString::from_ascii("/metrics")
+                value: ascii::AsciiString::from_ascii(endpoint)
                     .expect("can not parse header value. this should never fail"),
             });
 
