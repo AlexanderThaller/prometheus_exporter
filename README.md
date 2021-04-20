@@ -25,6 +25,11 @@ version `0.11`.
 For information on how to migrate from an older crate version follow
 [MIGRATION](/MIGRATION.md).
 
+**NOTICE** Version `0.8.0` used a vulnerable version of `tiny_http` please update
+to version `0.8.1` or higher. See issue
+[#18](https://github.com/AlexanderThaller/prometheus_exporter/issues/18) for
+more information.
+
 ## Usage
 
 Add this to your `Cargo.toml`:
