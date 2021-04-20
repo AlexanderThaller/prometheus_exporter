@@ -10,10 +10,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  format:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: fmt
+            override: true
 
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -22,14 +33,24 @@ jobs:
             components: clippy
             override: true
 
-      - name: Build
-        run: cargo build --verbose
+      - name: Run clippy
+        run: cargo clippy --verbose
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
 
       - name: Run tests
         run: cargo test --verbose
 
-      - name: Run clippy
-        run: cargo clippy --verbose
-
       - name: Run tests with default features disabled
         run: cargo test --no-default-features --verbose
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build
+        run: cargo build --verbose
