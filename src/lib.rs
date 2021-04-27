@@ -7,6 +7,7 @@
 //! The most basic usage of this crate is to just start a http server at the
 //! given binding which will export all metrics registered on the global
 //! prometheus registry:
+//! # TODO: Add example for `start_and_wait`.
 //!
 //! ```rust
 //! use prometheus_exporter::{
@@ -119,6 +120,13 @@
 //!   bytes.
 //! * `prometheus_exporter_request_duration_seconds`: The HTTP request latencies
 //!   in seconds.
+//!
+//! ## `start_and_wait`
+//! *Enabled by default*: yes
+//!
+//! Adds function `start_and_wait` to exporter server which will start the
+//! server and then suspend the current thread until a SIGINT/SIGTERM signal is
+//! received. It uses the [`ctrlc`](https://crates.io/crates/ctrlc) crate.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -207,10 +215,16 @@ pub enum Error {
     /// [`tiny_http::Server::http`] fails.
     #[error("can not start http server: {0}")]
     ServerStart(Box<dyn std::error::Error + Send + Sync + 'static>),
+
     /// Returned when supplying a non-ascii endpoint to
     /// [`Builder::with_endpoint`].
     #[error("supplied endpoint is not valid ascii: {0}")]
     EndpointNotAscii(String),
+
+    /// Returned when the signal handler for SIGINT/SIGTERM could not be setup.
+    #[cfg(feature = "start_and_wait")]
+    #[error("can not setup signal handler: {0}")]
+    SetupSignalHandler(ctrlc::Error),
 }
 
 /// Errors that can occur while handling requests.
@@ -255,12 +269,26 @@ pub struct Exporter {
 struct Server {}
 
 /// Create and start a new exporter which uses the given socket address to
-/// export the metrics.
+/// export the metrics. Will not block the current thread so execution can
+/// continue afterwards. For having a blocking server use [`start_and_wait`]
+/// instead.
 /// # Errors
 ///
 /// Will return [`enum@Error`] if the http server fails to start for any reason.
 pub fn start(binding: SocketAddr) -> Result<Exporter, Error> {
     Builder::new(binding).start()
+}
+
+/// Create and start a new exporter which uses the given socket address to
+/// export the metrics. Will then suspend the current thread until a
+/// SIGTERM/SIGINT signal is received.
+/// # Errors
+///
+/// Will return [`enum@Error`] if the http server fails to start or the signal
+/// handler can not be established.
+#[cfg(feature = "start_and_wait")]
+pub fn start_and_wait(binding: SocketAddr) -> Result<(), Error> {
+    Builder::new(binding).start_and_wait()
 }
 
 impl Builder {
@@ -314,6 +342,34 @@ impl Builder {
         )?;
 
         Ok(exporter)
+    }
+
+    /// Create and start new exporter based on the information from the builder.
+    /// Will suspend the current thread until a SIGTERM/SIGINT signal is
+    /// received.
+    /// # Errors
+    ///
+    /// Will return [`enum@Error`] if the http server fails to start for any
+    /// reason.
+    #[cfg(feature = "start_and_wait")]
+    pub fn start_and_wait(self) -> Result<(), Error> {
+        self.start()?;
+
+        let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+
+        {
+            let running = running.clone();
+            ctrlc::set_handler(move || {
+                running.store(false, std::sync::atomic::Ordering::SeqCst);
+            })
+            .map_err(Error::SetupSignalHandler)?;
+        }
+
+        while running.load(std::sync::atomic::Ordering::SeqCst) {
+            thread::park_timeout(Duration::from_millis(100));
+        }
+
+        Ok(())
     }
 }
 
