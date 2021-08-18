@@ -41,7 +41,10 @@ prometheus_exporter = "0.8"
 
 The most basic way to use this crate is to run the following:
 ```rust
-prometheus_exporter::start("0.0.0.0:9184".parse().unwrap()).unwrap())
+prometheus_exporter::start("0.0.0.0:9184".parse().expect(
+"failed to parse binding",
+))
+.expect("failed to start prometheus exporter");
 ```
 
 This will start the exporter and bind the http server to `0.0.0.0:9184`. After
@@ -52,7 +55,11 @@ exported.
 Another way to use the crate is like this:
 
 ```rust
-let exporter = prometheus_exporter::start("0.0.0.0:9184".parse().unwrap()).unwrap());
+let exporter = prometheus_exporter::start("0.0.0.0:9184".parse().expect(
+"failed to parse binding",
+))
+.expect("failed to start prometheus exporter");
+
 let guard = exporter.wait_request()
 ```
 
