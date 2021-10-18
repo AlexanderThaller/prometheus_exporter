@@ -17,10 +17,13 @@ collecting and rendering the prometheus metrics and
 through http.
 
 **NOTICE:** You have to use the same prometheus crate version that is used by
-this crate to make sure that the global registrar use by the prometheus macros
-works as expected. This crate re-exports the prometheus crate to make it easier
-to keep versions in sync (see examples). Currently this crate uses prometheus
-version `0.11`.
+this crate. This crate currently uses the metrics stored in the global registry.
+A different prometheus crate will register to a different global registry. This
+means that the macros used to register new metrics do not expose metrics to this
+exporter.
+
+This crate re-exports the prometheus crate to make it easier to keep versions in
+sync (see examples). Currently this crate uses prometheus version `0.13`.
 
 For information on how to migrate from an older crate version follow
 [MIGRATION](/MIGRATION.md).
