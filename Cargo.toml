@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.8.2"
+version = "0.8.3"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using tiny-http."
