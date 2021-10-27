@@ -79,10 +79,10 @@ See the [documentation](https://docs.rs/prometheus_exporter) and the
 You will need the following in your Cargo.toml
 ```rust
 [dependencies]
-prometheus_exporter = "0.8"
-env_logger = "0.9"
-log = "0.4"
-reqwest = "0.11"
+prometheus_exporter = "0.8.3"
+env_logger = "0.9.0"
+log = "0.4.14"
+reqwest = { version = "0.11.6",features = ["blocking"] }
 ```
 
 A very simple example looks like this (from
