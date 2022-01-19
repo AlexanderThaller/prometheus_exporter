@@ -1,6 +1,6 @@
 [package]
 name = "prometheus_exporter"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["Alexander Thaller <alexander.thaller@trivago.com>"]
 
 description = "Helper libary to export prometheus metrics using tiny-http."
@@ -29,7 +29,7 @@ lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.13", default-features = false }
 thiserror = "1"
-tiny_http = { version = "0.9", default-features = false }
+tiny_http = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.9"
