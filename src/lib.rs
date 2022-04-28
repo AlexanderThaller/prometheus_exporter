@@ -232,6 +232,7 @@ enum HandlerError {
 pub struct Builder {
     binding: SocketAddr,
     endpoint: Endpoint,
+    registry: prometheus::Registry,
 }
 
 #[derive(Debug)]
@@ -270,6 +271,7 @@ impl Builder {
         Self {
             binding,
             endpoint: Endpoint::default(),
+            registry: prometheus::default_registry().clone(),
         }
     }
 
@@ -287,6 +289,13 @@ impl Builder {
         clean_endpoint.push_str(endpoint.trim_matches('/'));
         self.endpoint = Endpoint(clean_endpoint);
         Ok(())
+    }
+
+    /// Sets the registry the metrics will be gathered from. If the registry is
+    /// not set, the default registry provided by the prometheus crate will be
+    /// used.
+    pub fn with_registry(&mut self, registry: prometheus::Registry) {
+        self.registry = registry;
     }
 
     /// Create and start new exporter based on the information from the builder.
@@ -311,6 +320,7 @@ impl Builder {
             request_sender,
             is_waiting,
             update_lock,
+            self.registry,
         )?;
 
         Ok(exporter)
@@ -368,6 +378,7 @@ impl Server {
         request_sender: SyncSender<Arc<Barrier>>,
         is_waiting: Arc<AtomicBool>,
         update_lock: Arc<Mutex<()>>,
+        registry: prometheus::Registry,
     ) -> Result<(), Error> {
         let server = HTTPServer::http(&binding).map_err(Error::ServerStart)?;
 
@@ -385,6 +396,7 @@ impl Server {
                         &request_sender,
                         &is_waiting,
                         &update_lock,
+                        registry.clone(),
                     )
                 } else {
                     Self::handler_redirect(request, &endpoint)
@@ -408,6 +420,7 @@ impl Server {
         request_sender: &SyncSender<Arc<Barrier>>,
         is_waiting: &Arc<AtomicBool>,
         update_lock: &Arc<Mutex<()>>,
+        registry: prometheus::Registry,
     ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
@@ -432,11 +445,15 @@ impl Server {
         #[cfg(feature = "internal_metrics")]
         drop(timer);
 
-        Self::process_request(request, encoder)
+        Self::process_request(request, encoder, registry)
     }
 
-    fn process_request(request: Request, encoder: &TextEncoder) -> Result<(), HandlerError> {
-        let metric_families = prometheus::gather();
+    fn process_request(
+        request: Request,
+        encoder: &TextEncoder,
+        registry: prometheus::Registry,
+    ) -> Result<(), HandlerError> {
+        let metric_families = registry.gather();
         let mut buffer = vec![];
 
         encoder
