@@ -450,7 +450,7 @@ impl Server {
 
                     // Just so there are no complains about unused err variable when logging
                     // feature is disabled
-                    drop(err)
+                    drop(err);
                 }
             }
         });
