@@ -20,12 +20,14 @@ features = ["logging", "internal_metrics"]
 [features]
 # Feature logging enables the start and request logging of the server.
 # Disable `prometheus_exporter` metrics by disabling internal_metrics feature
-default = ["logging", "internal_metrics"]
+default = ["logging", "internal_metrics", "start_and_wait"]
 logging = ["log"]
 internal_metrics = ["lazy_static"]
+start_and_wait = ["ctrlc"]
 
 [dependencies]
 ascii = "1"
+ctrlc = { version = "3", features = ["termination"], optional = true }
 lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.13", default-features = false }
