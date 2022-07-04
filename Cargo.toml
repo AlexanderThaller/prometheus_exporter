@@ -11,7 +11,8 @@ license = "MIT"
 readme = "README.md"
 repository = "https://github.com/AlexanderThaller/prometheus_exporter"
 
-edition = "2018"
+edition = "2021"
+rust-version = "1.56"
 
 [package.metadata.docs.rs]
 features = ["logging", "internal_metrics"]
