@@ -119,6 +119,8 @@
 //!   bytes.
 //! * `prometheus_exporter_request_duration_seconds`: The HTTP request latencies
 //!   in seconds.
+//!
+//! This feature will not work in combination with using a custom registry.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -293,7 +295,8 @@ impl Builder {
 
     /// Sets the registry the metrics will be gathered from. If the registry is
     /// not set, the default registry provided by the prometheus crate will be
-    /// used.
+    /// used. If a custom registry is used, the metrics provided by the
+    /// `internal_metrics` feature are not available.
     pub fn with_registry(&mut self, registry: prometheus::Registry) {
         self.registry = registry;
     }
