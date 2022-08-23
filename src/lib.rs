@@ -399,7 +399,7 @@ impl Server {
                         &request_sender,
                         &is_waiting,
                         &update_lock,
-                        registry.clone(),
+                        &registry,
                     )
                 } else {
                     Self::handler_redirect(request, &endpoint)
@@ -423,7 +423,7 @@ impl Server {
         request_sender: &SyncSender<Arc<Barrier>>,
         is_waiting: &Arc<AtomicBool>,
         update_lock: &Arc<Mutex<()>>,
-        registry: prometheus::Registry,
+        registry: &prometheus::Registry,
     ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
@@ -454,7 +454,7 @@ impl Server {
     fn process_request(
         request: Request,
         encoder: &TextEncoder,
-        registry: prometheus::Registry,
+        registry: &prometheus::Registry,
     ) -> Result<(), HandlerError> {
         let metric_families = registry.gather();
         let mut buffer = vec![];
