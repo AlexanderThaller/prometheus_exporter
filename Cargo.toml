@@ -22,12 +22,11 @@ features = ["logging", "internal_metrics"]
 # Disable `prometheus_exporter` metrics by disabling internal_metrics feature
 default = ["logging", "internal_metrics"]
 logging = ["log"]
-internal_metrics = ["lazy_static"]
+internal_metrics = []
 
 [dependencies]
 ascii = "1"
 either = "1"
-lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.13", default-features = false }
 thiserror = "1"
