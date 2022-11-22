@@ -41,16 +41,22 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Set rust version
+        run: rustup override set 1.59
+
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo +1.59 test --verbose
 
       - name: Run tests with default features disabled
-        run: cargo test --no-default-features --verbose
+        run: cargo +1.59 test --no-default-features --verbose
 
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
+      - name: Set rust version
+        run: rustup override set 1.59
+
       - name: Build
-        run: cargo build --verbose
+        run: cargo +1.59 build --verbose
