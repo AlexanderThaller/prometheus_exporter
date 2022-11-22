@@ -148,19 +148,20 @@ use either::Either;
 // Reexport prometheus so version missmatches don't happen.
 pub use prometheus;
 
+#[cfg(feature = "internal_metrics")]
+use prometheus::{
+    register_histogram_with_registry,
+    register_int_counter_with_registry,
+};
+
 use prometheus::register_int_gauge_with_registry;
 
 #[cfg(feature = "internal_metrics")]
 use crate::prometheus::{
-    register_histogram,
-    register_int_counter,
-    register_int_gauge,
     Histogram,
     IntCounter,
     IntGauge,
 };
-#[cfg(feature = "internal_metrics")]
-use lazy_static::lazy_static;
 #[cfg(feature = "logging")]
 use log::{
     error,
@@ -204,25 +205,6 @@ use tiny_http::{
     Server as HTTPServer,
     StatusCode,
 };
-
-#[cfg(feature = "internal_metrics")]
-lazy_static! {
-    static ref HTTP_COUNTER: IntCounter = register_int_counter!(
-        "prometheus_exporter_requests_total",
-        "Number of HTTP requests received."
-    )
-    .expect("can not create HTTP_COUNTER metric. this should never fail");
-    static ref HTTP_BODY_GAUGE: IntGauge = register_int_gauge!(
-        "prometheus_exporter_response_size_bytes",
-        "The HTTP response sizes in bytes."
-    )
-    .expect("can not create HTTP_BODY_GAUGE metric. this should never fail");
-    static ref HTTP_REQ_HISTOGRAM: Histogram = register_histogram!(
-        "prometheus_exporter_request_duration_seconds",
-        "The HTTP request latencies in seconds."
-    )
-    .expect("can not create HTTP_REQ_HISTOGRAM metric. this should never fail");
-}
 
 /// Errors that can occur while building or running an exporter.
 #[derive(Debug, Error)]
@@ -272,6 +254,15 @@ impl Default for Endpoint {
     fn default() -> Self {
         Self("/metrics".to_string())
     }
+}
+#[cfg(not(feature = "internal_metrics"))]
+struct InternalMetrics {}
+
+#[cfg(feature = "internal_metrics")]
+struct InternalMetrics {
+    http_counter: IntCounter,
+    http_body_gauge: IntGauge,
+    http_req_histogram: Histogram,
 }
 
 /// Helper to export prometheus metrics via http.
@@ -556,6 +547,39 @@ impl Server {
             }
         };
 
+        #[cfg(not(feature = "internal_metrics"))]
+        let internal_metrics = InternalMetrics {};
+
+        #[cfg(feature = "internal_metrics")]
+        let internal_metrics = {
+            let http_counter = register_int_counter_with_registry!(
+                "prometheus_exporter_requests_total",
+                "Number of HTTP requests received.",
+                registry
+            )
+            .expect("can not create http_counter metric. this should never fail");
+
+            let http_body_gauge = register_int_gauge_with_registry!(
+                "prometheus_exporter_response_size_bytes",
+                "The HTTP response sizes in bytes.",
+                registry
+            )
+            .expect("can not create http_body_gauge metric. this should never fail");
+
+            let http_req_histogram = register_histogram_with_registry!(
+                "prometheus_exporter_request_duration_seconds",
+                "The HTTP request latencies in seconds.",
+                registry
+            )
+            .expect("can not create http_req_histogram metric. this should never fail");
+
+            InternalMetrics {
+                http_counter,
+                http_body_gauge,
+                http_req_histogram,
+            }
+        };
+
         let failed_registry = prometheus::Registry::new();
 
         register_int_gauge_with_registry!(status_metric_name, "status of the collector", registry)
@@ -587,6 +611,7 @@ impl Server {
                         &update_lock,
                         &registry,
                         &failed_registry,
+                        &internal_metrics,
                     )
                 } else {
                     Self::handler_redirect(request, &endpoint)
@@ -614,12 +639,13 @@ impl Server {
         update_lock: &Arc<Mutex<()>>,
         registry: &prometheus::Registry,
         failed_registry: &prometheus::Registry,
+        internal_metrics: &InternalMetrics,
     ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
-        HTTP_COUNTER.inc();
+        internal_metrics.http_counter.inc();
 
         #[cfg(feature = "internal_metrics")]
-        let timer = HTTP_REQ_HISTOGRAM.start_timer();
+        let timer = internal_metrics.http_req_histogram.start_timer();
 
         if is_waiting.load(Ordering::SeqCst) {
             let barrier = Arc::new(Barrier::new(2));
@@ -642,10 +668,23 @@ impl Server {
             .read()
             .expect("lets hope there is no poisioned mutex")
         {
-            Status::Ok => Self::process_request(request, encoder, registry, StatusCode(200), &None),
-            Status::Failing { err } => {
-                Self::process_request(request, encoder, failed_registry, StatusCode(500), err)
-            }
+            Status::Ok => Self::process_request(
+                request,
+                encoder,
+                registry,
+                StatusCode(200),
+                &None,
+                internal_metrics,
+            ),
+
+            Status::Failing { err } => Self::process_request(
+                request,
+                encoder,
+                failed_registry,
+                StatusCode(500),
+                err,
+                internal_metrics,
+            ),
         }
     }
 
@@ -655,6 +694,8 @@ impl Server {
         registry: &prometheus::Registry,
         status_code: StatusCode,
         message: &Option<String>,
+
+        #[allow(unused_variables)] internal_metrics: &InternalMetrics,
     ) -> Result<(), HandlerError> {
         let metric_families = registry.gather();
         let mut buffer = vec![];
@@ -674,7 +715,7 @@ impl Server {
             .map_err(HandlerError::EncodeMetrics)?;
 
         #[cfg(feature = "internal_metrics")]
-        HTTP_BODY_GAUGE.set(buffer.len() as i64);
+        internal_metrics.http_body_gauge.set(buffer.len() as i64);
 
         let response = Response::from_data(buffer).with_status_code(status_code);
         request.respond(response).map_err(HandlerError::Response)?;
