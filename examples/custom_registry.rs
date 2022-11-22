@@ -31,8 +31,7 @@ fn main() {
 
     metric.set(42.0);
 
-    let mut builder = prometheus_exporter::Builder::new(addr);
-    builder.with_registry(registry);
+    let builder = prometheus_exporter::Builder::new(addr).with_registry(&registry);
 
     // Start exporter
     builder.start().expect("can not start exporter");

@@ -15,7 +15,8 @@
 //! };
 //!
 //! let binding = "127.0.0.1:9184".parse().unwrap();
-//! // Will create an exporter and start the http server using the given binding.
+//!
+//! // Create an exporter and start the http server using the given binding.
 //! // If the webserver can't bind to the given binding it will fail with an error.
 //! prometheus_exporter::start(binding).unwrap();
 //!
@@ -112,7 +113,7 @@
 //! ## `internal_metrics`
 //! *Enabled by default*: yes
 //!
-//! Enables the registration of internal metrics used by the crate. Will enable
+//! Enables the registration of internal metrics used by the crate. Enables
 //! the following metrics:
 //! * `prometheus_exporter_requests_total`: Number of HTTP requests received.
 //! * `prometheus_exporter_response_size_bytes`: The HTTP response sizes in
@@ -130,6 +131,8 @@
 
 #[cfg(test)]
 mod test;
+
+use either::Either;
 
 // Reexport prometheus so version missmatches don't happen.
 pub use prometheus;
@@ -156,7 +159,10 @@ use crate::prometheus::{
     TextEncoder,
 };
 use std::{
-    net::SocketAddr,
+    net::{
+        SocketAddr,
+        TcpListener,
+    },
     sync::{
         atomic::{
             AtomicBool,
@@ -232,13 +238,14 @@ enum HandlerError {
 /// Builder to create a new [`crate::Exporter`].
 #[derive(Debug)]
 pub struct Builder {
-    binding: SocketAddr,
+    binding: Either<SocketAddr, TcpListener>,
     endpoint: Endpoint,
     registry: prometheus::Registry,
 }
 
 #[derive(Debug)]
 struct Endpoint(String);
+
 impl Default for Endpoint {
     fn default() -> Self {
         Self("/metrics".to_string())
@@ -261,7 +268,7 @@ struct Server {}
 /// export the metrics.
 /// # Errors
 ///
-/// Will return [`enum@Error`] if the http server fails to start for any reason.
+/// Returns [`enum@Error`] if the http server fails to start for any reason.
 pub fn start(binding: SocketAddr) -> Result<Exporter, Error> {
     Builder::new(binding).start()
 }
@@ -271,7 +278,17 @@ impl Builder {
     #[must_use]
     pub fn new(binding: SocketAddr) -> Builder {
         Self {
-            binding,
+            binding: either::Left(binding),
+            endpoint: Endpoint::default(),
+            registry: prometheus::default_registry().clone(),
+        }
+    }
+
+    /// Create a new builder with the given [`TcpListener`].
+    #[must_use]
+    pub fn new_listener(listener: TcpListener) -> Builder {
+        Self {
+            binding: either::Right(listener),
             endpoint: Endpoint::default(),
             registry: prometheus::default_registry().clone(),
         }
@@ -281,15 +298,17 @@ impl Builder {
     /// not set with this method then the default `/metrics` will be used.
     /// # Errors
     ///
-    /// Will return [`enum@Error`] if the supplied string slice is not valid
+    /// Returns [`enum@Error`] if the supplied string slice is not valid
     /// ascii.
     pub fn with_endpoint(&mut self, endpoint: &str) -> Result<(), Error> {
         if !endpoint.is_ascii() {
             return Err(Error::EndpointNotAscii(endpoint.to_string()));
         }
+
         let mut clean_endpoint = String::from('/');
         clean_endpoint.push_str(endpoint.trim_matches('/'));
         self.endpoint = Endpoint(clean_endpoint);
+
         Ok(())
     }
 
@@ -297,14 +316,37 @@ impl Builder {
     /// not set, the default registry provided by the prometheus crate will be
     /// used. If a custom registry is used, the metrics provided by the
     /// `internal_metrics` feature are not available.
-    pub fn with_registry(&mut self, registry: prometheus::Registry) {
-        self.registry = registry;
+    #[must_use]
+    pub fn with_registry(mut self, registry: &prometheus::Registry) -> Self {
+        self.registry = registry.clone();
+        self
     }
 
-    /// Create and start new exporter based on the information from the builder.
+    /// Set the binding to the given socket addr. The exporter will create a new
+    /// [`TcpListener`] itself.
+    ///
+    /// Overrides existing binding set by [`Builder::with_listener`].
+    #[must_use]
+    pub fn with_binding(mut self, binding: SocketAddr) -> Self {
+        self.binding = either::Left(binding);
+        self
+    }
+
+    /// Set the binding to the given listener. The exporter will use
+    /// the given [`TcpListener`] instead of creating a new one.
+    ///
+    /// Overrides existing binding set by [`Builder::with_binding`].
+    #[must_use]
+    pub fn with_listener(mut self, listener: TcpListener) -> Self {
+        self.binding = either::Right(listener);
+        self
+    }
+
+    /// Create and start new exporter based on the information from
+    /// the builder.
     /// # Errors
     ///
-    /// Will return [`enum@Error`] if the http server fails to start for any
+    /// Returns [`enum@Error`] if the http server fails to start for any
     /// reason.
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
@@ -332,9 +374,20 @@ impl Builder {
 
 impl Exporter {
     /// Return new builder which will create a exporter once built.
+    ///
+    /// Uses a given binding to create a new [`TcpListener`] when starting the
+    /// http server.
     #[must_use]
     pub fn builder(binding: SocketAddr) -> Builder {
         Builder::new(binding)
+    }
+
+    #[must_use]
+    /// Return new builder which will create a exporter once built.
+    ///
+    /// Uses a given [`TcpListener`] when starting the http server.
+    pub fn builder_listener(listener: TcpListener) -> Builder {
+        Builder::new_listener(listener)
     }
 
     /// Wait until a new request comes in. Returns a mutex guard to make the
@@ -375,20 +428,37 @@ impl Exporter {
 }
 
 impl Server {
+    #[allow(clippy::too_many_arguments)]
     fn start(
-        binding: SocketAddr,
+        binding: Either<SocketAddr, TcpListener>,
         endpoint: String,
         request_sender: SyncSender<Arc<Barrier>>,
         is_waiting: Arc<AtomicBool>,
         update_lock: Arc<Mutex<()>>,
         registry: prometheus::Registry,
     ) -> Result<(), Error> {
-        let server = HTTPServer::http(&binding).map_err(Error::ServerStart)?;
+        let server = match binding {
+            either::Left(binding) => {
+                #[cfg(feature = "logging")]
+                info!("exporting metrics to http://{binding}{endpoint}");
+
+                HTTPServer::http(binding).map_err(Error::ServerStart)?
+            }
+
+            either::Right(listener) => {
+                #[cfg(feature = "logging")]
+                info!(
+                    "exporting metrics to http://{}",
+                    listener
+                        .local_addr()
+                        .expect("can not get listener local_addr. this should never happen")
+                );
+
+                HTTPServer::from_listener(listener, None).map_err(Error::ServerStart)?
+            }
+        };
 
         thread::spawn(move || {
-            #[cfg(feature = "logging")]
-            info!("exporting metrics to http://{}{}", binding, endpoint);
-
             let encoder = TextEncoder::new();
 
             for request in server.incoming_requests() {

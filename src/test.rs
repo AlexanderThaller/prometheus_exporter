@@ -1,14 +1,38 @@
-use crate::prometheus::register_counter;
+use std::net::TcpListener;
+
+use prometheus::{
+    register_counter_with_registry,
+    Registry,
+};
+
+fn port_is_available(port: u16) -> Option<(u16, TcpListener)> {
+    if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) {
+        Some((port, listener))
+    } else {
+        None
+    }
+}
+
+fn get_available_port() -> Option<(u16, TcpListener)> {
+    (6000..10000).find_map(|port| port_is_available(port))
+}
+
+fn get_binding() -> (String, TcpListener) {
+    let (port, listener) = get_available_port().expect("unable to get a free port");
+
+    (format!("127.0.0.1:{port}"), listener)
+}
 
 #[test]
 fn wait_request() {
-    let binding_raw = "127.0.0.1:9185";
+    let (binding_raw, listener) = get_binding();
     let metric_name = "test_wait_request";
 
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
 
     {
         let barrier = barrier.clone();
+        let binding_raw = binding_raw.clone();
 
         std::thread::spawn(move || {
             println!("client barrier");
@@ -19,10 +43,14 @@ fn wait_request() {
         });
     }
 
-    let binding = binding_raw.parse().expect("can not parse binding");
-    let exporter = crate::start(binding).expect("can not start exporter");
+    let registry = Registry::new();
 
-    let counter = register_counter!(metric_name, "help").unwrap();
+    let exporter = crate::Exporter::builder_listener(listener)
+        .with_registry(&registry)
+        .start()
+        .expect("can not start exporter");
+
+    let counter = register_counter_with_registry!(metric_name, "help", registry).unwrap();
 
     barrier.wait();
 
@@ -42,13 +70,17 @@ fn wait_request() {
 
 #[test]
 fn wait_duration() {
-    let binding_raw = "127.0.0.1:9186";
+    let (binding_raw, listener) = get_binding();
     let metric_name = "test_wait_duration_counter";
 
-    let binding = binding_raw.parse().expect("can not parse binding");
-    let exporter = crate::start(binding).expect("can not start exporter");
+    let registry = Registry::new();
 
-    let counter = register_counter!(metric_name, "help").unwrap();
+    let exporter = crate::Exporter::builder_listener(listener)
+        .with_registry(&registry)
+        .start()
+        .expect("can not start exporter");
+
+    let counter = register_counter_with_registry!(metric_name, "help", registry).unwrap();
 
     let guard = exporter.wait_duration(std::time::Duration::from_millis(100));
     counter.inc();
