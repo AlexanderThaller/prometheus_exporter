@@ -26,6 +26,7 @@ internal_metrics = ["lazy_static"]
 
 [dependencies]
 ascii = "1"
+either = "1"
 lazy_static = { version = "1", optional = true }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.13", default-features = false }
@@ -36,4 +37,4 @@ tiny_http = { version = "0.10", default-features = false }
 env_logger = "0.9"
 log = { version = "0.4" }
 rand = "0.8"
-reqwest = { version = "0.11", features = ["blocking"] }
+reqwest = { version = "0.11", default-features = false, features = ["blocking"] }
