@@ -103,6 +103,17 @@
 //!
 //! You can find examples under [`/examples`](https://github.com/AlexanderThaller/prometheus_exporter/tree/master/examples).
 //!
+//! # Indicating errors
+//! When collecting metrics fails it is good to communicate that to
+//! prometheus (see
+//! <https://prometheus.io/docs/instrumenting/writing_exporters/#failed-scrapes>).
+//! For that the [`Exporter`] struct has the functions
+//! [`Exporter::set_status_failing()`] and
+//! [`Exporter::set_status_failing_with_message`]. When set to
+//! [`Status::Failing`] the Exporter will respond with a 500 status code and the
+//! `up` metric set to `0`. When a error message is provided it will be printed
+//! before the metrics when exporting.
+//!
 //! # Crate Features
 //! ## `logging`
 //! *Enabled by default*: yes
@@ -137,6 +148,8 @@ use either::Either;
 // Reexport prometheus so version missmatches don't happen.
 pub use prometheus;
 
+use prometheus::register_int_gauge_with_registry;
+
 #[cfg(feature = "internal_metrics")]
 use crate::prometheus::{
     register_histogram,
@@ -159,6 +172,7 @@ use crate::prometheus::{
     TextEncoder,
 };
 use std::{
+    io::Write,
     net::{
         SocketAddr,
         TcpListener,
@@ -177,6 +191,7 @@ use std::{
         Barrier,
         Mutex,
         MutexGuard,
+        RwLock,
     },
     thread,
     time::Duration,
@@ -187,6 +202,7 @@ use tiny_http::{
     Request,
     Response,
     Server as HTTPServer,
+    StatusCode,
 };
 
 #[cfg(feature = "internal_metrics")]
@@ -215,10 +231,15 @@ pub enum Error {
     /// [`tiny_http::Server::http`] fails.
     #[error("can not start http server: {0}")]
     ServerStart(Box<dyn std::error::Error + Send + Sync + 'static>),
+
     /// Returned when supplying a non-ascii endpoint to
     /// [`Builder::with_endpoint`].
     #[error("supplied endpoint is not valid ascii: {0}")]
     EndpointNotAscii(String),
+
+    /// Returned when registering the up metric failed.
+    #[error("failed to register up metric with registry: {0}")]
+    RegisterUpMetric(prometheus::Error),
 }
 
 /// Errors that can occur while handling requests.
@@ -241,6 +262,7 @@ pub struct Builder {
     binding: Either<SocketAddr, TcpListener>,
     endpoint: Endpoint,
     registry: prometheus::Registry,
+    status_name: Option<String>,
 }
 
 #[derive(Debug)]
@@ -257,12 +279,36 @@ impl Default for Endpoint {
 pub struct Exporter {
     request_receiver: Receiver<Arc<Barrier>>,
     is_waiting: Arc<AtomicBool>,
+    status: Arc<RwLock<Status>>,
     update_lock: Arc<Mutex<()>>,
 }
 
 /// Helper to export prometheus metrics via http.
 #[derive(Debug)]
 struct Server {}
+
+/// Represents the status of the exporter.
+#[derive(Debug, Default)]
+pub enum Status {
+    /// Exporter encountered no error when collecting metrics.
+    #[default]
+    Ok,
+
+    /// Exporter encountered an error when collecting metrics.
+    Failing {
+        /// Optional error message which will be returned when the exporter gets
+        /// scraped.
+        err: Option<String>,
+    },
+}
+
+impl Status {
+    /// Returns `true` when [`Status`] is [`Status::Ok`].
+    #[must_use]
+    pub fn ok(&self) -> bool {
+        matches!(self, Status::Ok)
+    }
+}
 
 /// Create and start a new exporter which uses the given socket address to
 /// export the metrics.
@@ -281,6 +327,7 @@ impl Builder {
             binding: either::Left(binding),
             endpoint: Endpoint::default(),
             registry: prometheus::default_registry().clone(),
+            status_name: None,
         }
     }
 
@@ -291,6 +338,7 @@ impl Builder {
             binding: either::Right(listener),
             endpoint: Endpoint::default(),
             registry: prometheus::default_registry().clone(),
+            status_name: None,
         }
     }
 
@@ -332,6 +380,14 @@ impl Builder {
         self
     }
 
+    /// Set the name of the status metric. By default the metric is
+    /// called `up`. When set the metric is called `{name}_up`.
+    #[must_use]
+    pub fn with_status_name(mut self, name: &str) -> Self {
+        self.status_name = Some(name.to_owned());
+        self
+    }
+
     /// Set the binding to the given listener. The exporter will use
     /// the given [`TcpListener`] instead of creating a new one.
     ///
@@ -344,18 +400,27 @@ impl Builder {
 
     /// Create and start new exporter based on the information from
     /// the builder.
+    ///
     /// # Errors
     ///
     /// Returns [`enum@Error`] if the http server fails to start for any
     /// reason.
     pub fn start(self) -> Result<Exporter, Error> {
         let (request_sender, request_receiver) = sync_channel(0);
-        let is_waiting = Arc::new(AtomicBool::new(false));
+        let is_waiting = Arc::new(AtomicBool::default());
+        let status = Arc::new(RwLock::new(Status::default()));
         let update_lock = Arc::new(Mutex::new(()));
+
+        let status_metric_name = if let Some(name) = &self.status_name {
+            format!("{name}_up")
+        } else {
+            "up".to_string()
+        };
 
         let exporter = Exporter {
             request_receiver,
             is_waiting: Arc::clone(&is_waiting),
+            status: Arc::clone(&status),
             update_lock: Arc::clone(&update_lock),
         };
 
@@ -364,8 +429,10 @@ impl Builder {
             self.endpoint.0,
             request_sender,
             is_waiting,
+            status,
             update_lock,
             self.registry,
+            &status_metric_name,
         )?;
 
         Ok(exporter)
@@ -425,6 +492,35 @@ impl Exporter {
             .lock()
             .expect("poisioned mutex. should never happen")
     }
+
+    /// Set `status` for the exporter. When set to [`Status::Failing`] the
+    /// exporter will respond with a 500 (Internal Server Error) and the `up`
+    /// metric set to `0`. When set to [`Status::Ok`] (which is the default) the
+    /// exporter responds with a 200 (Ok) and the metrics from the
+    /// registry that the exporter uses.
+    pub fn set_status(&self, status: Status) {
+        *self
+            .status
+            .write()
+            .expect("posioned mutex hopefully never happens") = status;
+    }
+
+    /// Set `status` for the exporter to [`Status::Ok`].
+    pub fn set_status_ok(&self) {
+        self.set_status(Status::Ok);
+    }
+
+    /// Set `status` for the exporter to [`Status::Failing`]
+    /// without an error message.
+    pub fn set_status_failing(&self) {
+        self.set_status(Status::Failing { err: None });
+    }
+
+    /// Set `status` for the exporter to [`Status::Failing`]
+    /// with the given error message.
+    pub fn set_status_failing_with_message(&self, err: Option<String>) {
+        self.set_status(Status::Failing { err });
+    }
 }
 
 impl Server {
@@ -434,8 +530,10 @@ impl Server {
         endpoint: String,
         request_sender: SyncSender<Arc<Barrier>>,
         is_waiting: Arc<AtomicBool>,
+        status: Arc<RwLock<Status>>,
         update_lock: Arc<Mutex<()>>,
         registry: prometheus::Registry,
+        status_metric_name: &str,
     ) -> Result<(), Error> {
         let server = match binding {
             either::Left(binding) => {
@@ -458,6 +556,23 @@ impl Server {
             }
         };
 
+        let failed_registry = prometheus::Registry::new();
+
+        register_int_gauge_with_registry!(status_metric_name, "status of the collector", registry)
+            .map_err(Error::RegisterUpMetric)?
+            .set(1);
+
+        register_int_gauge_with_registry!(
+            status_metric_name,
+            "status of the collector",
+            failed_registry
+        )
+        .expect(
+            "failed to register status metric. should never fail as the failed_registry is only \
+             used internally",
+        )
+        .set(0);
+
         thread::spawn(move || {
             let encoder = TextEncoder::new();
 
@@ -468,8 +583,10 @@ impl Server {
                         &encoder,
                         &request_sender,
                         &is_waiting,
+                        &status,
                         &update_lock,
                         &registry,
+                        &failed_registry,
                     )
                 } else {
                     Self::handler_redirect(request, &endpoint)
@@ -487,13 +604,16 @@ impl Server {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handler_metrics(
         request: Request,
         encoder: &TextEncoder,
         request_sender: &SyncSender<Arc<Barrier>>,
         is_waiting: &Arc<AtomicBool>,
+        status: &Arc<RwLock<Status>>,
         update_lock: &Arc<Mutex<()>>,
         registry: &prometheus::Registry,
+        failed_registry: &prometheus::Registry,
     ) -> Result<(), HandlerError> {
         #[cfg(feature = "internal_metrics")]
         HTTP_COUNTER.inc();
@@ -518,16 +638,36 @@ impl Server {
         #[cfg(feature = "internal_metrics")]
         drop(timer);
 
-        Self::process_request(request, encoder, registry)
+        match &*status
+            .read()
+            .expect("lets hope there is no poisioned mutex")
+        {
+            Status::Ok => Self::process_request(request, encoder, registry, StatusCode(200), &None),
+            Status::Failing { err } => {
+                Self::process_request(request, encoder, failed_registry, StatusCode(500), err)
+            }
+        }
     }
 
     fn process_request(
         request: Request,
         encoder: &TextEncoder,
         registry: &prometheus::Registry,
+        status_code: StatusCode,
+        message: &Option<String>,
     ) -> Result<(), HandlerError> {
         let metric_families = registry.gather();
         let mut buffer = vec![];
+
+        if let Some(message) = message {
+            buffer
+                .write_all(message.as_bytes())
+                .expect("should never fail");
+
+            buffer
+                .write_all("\n\n".as_bytes())
+                .expect("should never fail");
+        }
 
         encoder
             .encode(&metric_families, &mut buffer)
@@ -536,14 +676,14 @@ impl Server {
         #[cfg(feature = "internal_metrics")]
         HTTP_BODY_GAUGE.set(buffer.len() as i64);
 
-        let response = Response::from_data(buffer);
+        let response = Response::from_data(buffer).with_status_code(status_code);
         request.respond(response).map_err(HandlerError::Response)?;
 
         Ok(())
     }
 
     fn handler_redirect(request: Request, endpoint: &str) -> Result<(), HandlerError> {
-        let response = Response::from_string(format!("try {} for metrics\n", endpoint))
+        let response = Response::from_string(format!("try {endpoint} for metrics\n"))
             .with_status_code(301)
             .with_header(Header {
                 field: "Location"
