@@ -12,7 +12,7 @@ readme = "README.md"
 repository = "https://github.com/AlexanderThaller/prometheus_exporter"
 
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.62"
 
 [package.metadata.docs.rs]
 features = ["logging", "internal_metrics"]
