@@ -100,7 +100,7 @@
 //! counter.inc();
 //! drop(guard);
 //! ```
-//! 
+//!
 //! # Custom Wait
 //! TODO
 //! ```
