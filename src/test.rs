@@ -14,7 +14,7 @@ fn port_is_available(port: u16) -> Option<(u16, TcpListener)> {
 }
 
 fn get_available_port() -> Option<(u16, TcpListener)> {
-    (6000..10000).find_map(|port| port_is_available(port))
+    (6000..10000).find_map(port_is_available)
 }
 
 fn get_binding() -> (String, TcpListener) {
@@ -38,8 +38,7 @@ fn wait_request() {
             println!("client barrier");
             barrier.wait();
 
-            reqwest::blocking::get(&format!("http://{}", binding_raw))
-                .expect("can not make request");
+            reqwest::blocking::get(format!("http://{binding_raw}")).expect("can not make request");
         });
     }
 
@@ -58,14 +57,14 @@ fn wait_request() {
     counter.inc();
     drop(guard);
 
-    let body = reqwest::blocking::get(&format!("http://{}", binding_raw))
+    let body = reqwest::blocking::get(format!("http://{binding_raw}"))
         .expect("can not make request")
         .text()
         .expect("can not extract body");
 
-    println!("body:\n{}", body);
+    println!("body:\n{body}");
 
-    assert!(body.contains(&format!("{} 1", metric_name)));
+    assert!(body.contains(&format!("{metric_name} 1")));
 }
 
 #[test]
@@ -86,14 +85,14 @@ fn wait_duration() {
     counter.inc();
     drop(guard);
 
-    let body = reqwest::blocking::get(&format!("http://{}", binding_raw))
+    let body = reqwest::blocking::get(format!("http://{binding_raw}"))
         .expect("can not make request")
         .text()
         .expect("can not extract body");
 
-    println!("body:\n{}", body);
+    println!("body:\n{body}");
 
-    assert!(body.contains(&format!("{} 1", metric_name)));
+    assert!(body.contains(&format!("{metric_name} 1")));
 }
 
 #[test]
@@ -113,8 +112,7 @@ fn set_failed() {
             println!("client barrier");
             barrier.wait();
 
-            reqwest::blocking::get(&format!("http://{}", binding_raw))
-                .expect("can not make request");
+            reqwest::blocking::get(format!("http://{binding_raw}")).expect("can not make request");
         });
     }
 
@@ -134,46 +132,46 @@ fn set_failed() {
     drop(guard);
 
     let response =
-        reqwest::blocking::get(&format!("http://{}", binding_raw)).expect("can not make request");
+        reqwest::blocking::get(format!("http://{binding_raw}")).expect("can not make request");
 
     let status = response.status();
     let body = response.text().expect("can not extract body");
 
     assert_eq!(status, 200);
 
-    println!("body:\n{}", body);
+    println!("body:\n{body}");
 
-    assert!(body.contains(&format!("{} 1", metric_name)));
+    assert!(body.contains(&format!("{metric_name} 1")));
     assert!(body.contains("up 1"));
 
     exporter.set_status_failing_with_message(Some(ERROR_MESSAGE.to_string()));
 
     let response =
-        reqwest::blocking::get(&format!("http://{}", binding_raw)).expect("can not make request");
+        reqwest::blocking::get(format!("http://{binding_raw}")).expect("can not make request");
 
     let status = response.status();
     let body = response.text().expect("can not extract body");
 
     assert_eq!(status, 500);
 
-    println!("body:\n{}", body);
+    println!("body:\n{body}");
 
     assert!(body.contains(ERROR_MESSAGE));
-    assert!(!body.contains(&format!("{} 1", metric_name)));
+    assert!(!body.contains(&format!("{metric_name} 1")));
     assert!(body.contains("up 0"));
 
     exporter.set_status_ok();
 
     let response =
-        reqwest::blocking::get(&format!("http://{}", binding_raw)).expect("can not make request");
+        reqwest::blocking::get(format!("http://{binding_raw}")).expect("can not make request");
 
     let status = response.status();
     let body = response.text().expect("can not extract body");
 
     assert_eq!(status, 200);
 
-    println!("body:\n{}", body);
+    println!("body:\n{body}");
 
-    assert!(body.contains(&format!("{} 1", metric_name)));
+    assert!(body.contains(&format!("{metric_name} 1")));
     assert!(body.contains("up 1"));
 }

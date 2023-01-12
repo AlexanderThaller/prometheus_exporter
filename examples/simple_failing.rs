@@ -35,7 +35,7 @@ fn main() {
         .expect("can not start exporter");
 
     // Get metrics from exporter
-    let body = reqwest::blocking::get(&format!("http://{}/metrics", addr_raw))
+    let body = reqwest::blocking::get(format!("http://{addr_raw}/metrics"))
         .expect("can not get metrics from exporter")
         .text()
         .expect("can not body text from request");
@@ -44,7 +44,7 @@ fn main() {
 
     exporter.set_status_failing();
 
-    let response = reqwest::blocking::get(&format!("http://{}/metrics", addr_raw))
+    let response = reqwest::blocking::get(format!("http://{addr_raw}/metrics"))
         .expect("can not get metrics from exporter");
 
     let status = response.status();

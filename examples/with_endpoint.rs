@@ -33,7 +33,7 @@ fn main() {
     builder.start().expect("can not start exporter");
 
     // Get metrics from exporter
-    let body = reqwest::blocking::get(&format!("http://{}/{}", addr_raw, endpoint))
+    let body = reqwest::blocking::get(format!("http://{addr_raw}/{endpoint}"))
         .expect("can not get metrics from exporter")
         .text()
         .expect("can not body text from request");

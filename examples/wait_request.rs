@@ -33,7 +33,7 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_millis(1000));
 
             // Get metrics from exporter
-            let body = reqwest::blocking::get(&format!("http://{}/metrics", addr_raw))
+            let body = reqwest::blocking::get(format!("http://{addr_raw}/metrics"))
                 .expect("can not get metrics from exporter")
                 .text()
                 .expect("can not body text from request");
