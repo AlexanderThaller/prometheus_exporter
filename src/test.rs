@@ -24,6 +24,34 @@ fn get_binding() -> (String, TcpListener) {
 }
 
 #[test]
+fn wait() {
+    let (binding_raw, listener) = get_binding();
+    let metric_name = "test_wait_counter";
+
+    let registry = Registry::new();
+
+    let exporter = crate::Exporter::builder_listener(listener)
+        .with_registry(&registry)
+        .start()
+        .expect("can not start exporter");
+
+    let counter = register_counter_with_registry!(metric_name, "help", registry).unwrap();
+
+    let guard = exporter.wait();
+    counter.inc();
+    drop(guard);
+
+    let body = reqwest::blocking::get(format!("http://{binding_raw}"))
+        .expect("can not make request")
+        .text()
+        .expect("can not extract body");
+
+    println!("body:\n{body}");
+
+    assert!(body.contains(&format!("{metric_name} 1")));
+}
+
+#[test]
 fn wait_request() {
     let (binding_raw, listener) = get_binding();
     let metric_name = "test_wait_request";
