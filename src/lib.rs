@@ -101,6 +101,37 @@
 //! drop(guard);
 //! ```
 //!
+//! # Custom Wait
+//! TODO
+//! ```
+//! use prometheus_exporter::{
+//!     self,
+//!     prometheus::register_counter,
+//! };
+//! # let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+//! # {
+//! #   let barrier = barrier.clone();
+//! #   std::thread::spawn(move || {
+//! #     println!("client barrier");
+//! #     barrier.wait();
+//! #     let body = reqwest::blocking::get("http://127.0.0.1:9187").unwrap().text().unwrap();
+//! #     println!("body = {:?}", body);
+//! #   });
+//! # }
+//!
+//! let binding = "127.0.0.1:9187".parse().unwrap();
+//! let exporter = prometheus_exporter::start(binding).unwrap();
+//!
+//! let counter = register_counter!("example_exporter_counter", "help").unwrap();
+//!
+//! // TODO
+//! let guard = exporter.wait();
+//! # barrier.wait();
+//! counter.inc();
+//! drop(guard);
+//! ```
+//!
+//!
 //! You can find examples under [`/examples`](https://github.com/AlexanderThaller/prometheus_exporter/tree/master/examples).
 //!
 //! # Indicating errors
@@ -446,6 +477,15 @@ impl Exporter {
     /// Uses a given [`TcpListener`] when starting the http server.
     pub fn builder_listener(listener: TcpListener) -> Builder {
         Builder::new_listener(listener)
+    }
+
+    /// TODO
+    #[must_use = "not using the guard will result in the exporter returning the prometheus data \
+                  immediately over http"]
+    pub fn wait(&self) -> MutexGuard<'_, ()> {
+        self.update_lock
+            .lock()
+            .expect("poisioned mutex. should never happen")
     }
 
     /// Wait until a new request comes in. Returns a mutex guard to make the
