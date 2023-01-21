@@ -143,6 +143,9 @@
 #[cfg(test)]
 mod test;
 
+#[cfg(feature = "async")]
+pub mod async_tokio_hyper;
+
 use either::Either;
 
 // Reexport prometheus so version missmatches don't happen.
