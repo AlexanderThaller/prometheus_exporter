@@ -717,7 +717,16 @@ impl Server {
         #[cfg(feature = "internal_metrics")]
         internal_metrics.http_body_gauge.set(buffer.len() as i64);
 
-        let response = Response::from_data(buffer).with_status_code(status_code);
+        let response = Response::from_data(buffer)
+            .with_status_code(status_code)
+            .with_header(Header {
+                field: "Content-Type"
+                    .parse()
+                    .expect("can not parse content-type header field. this should never fail"),
+                value: "text/plain; charset=UTF-8"
+                    .parse()
+                    .expect("can not parse header value. this should never fail"),
+            });
         request.respond(response).map_err(HandlerError::Response)?;
 
         Ok(())
