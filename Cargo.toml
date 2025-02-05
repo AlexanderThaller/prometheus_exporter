@@ -15,22 +15,25 @@ edition = "2021"
 rust-version = "1.62"
 
 [package.metadata.docs.rs]
-features = ["logging", "internal_metrics"]
+features = ["logging", "internal_metrics", "async"]
 
 [features]
 # Feature logging enables the start and request logging of the server.
 # Disable `prometheus_exporter` metrics by disabling internal_metrics feature
-default = ["logging", "internal_metrics"]
+default = ["logging", "internal_metrics", "async"]
 logging = ["log"]
 internal_metrics = []
+async = ["tokio", "hyper"]
 
 [dependencies]
 ascii = "1"
 either = "1"
+hyper = { version = "0.14", optional = true, features = ["full"] }
 log = { version = "0.4", optional = true }
 prometheus = { version = "0.13", default-features = false }
 thiserror = "1"
 tiny_http = { version = "0.12", default-features = false }
+tokio = { version = "1", optional = true, features = ["full"] }
 
 [dev-dependencies]
 env_logger = "0.9"
